@@ -61,12 +61,12 @@ projeto-casa-inteligente/
 ### Passo 1 — Clone o repositório
  
 ```bash
-git clone https://github.com/seu-usuario/projeto-casa-inteligente.git
+git clone https://github.com/rafuulll/projeto-casa-inteligente.git
 cd projeto-casa-inteligente
 ```
  
 ### Passo 2 — Suba o Docker
- 
+
 ```bash
 docker-compose up --build
 ```
