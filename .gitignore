@@ -1,0 +1,40 @@
+# Node.js (backend + frontend)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Variáveis de ambiente
+.env
+.env.local
+.env.production
+.env.development
+
+# React / Vite (frontend)
+frontend/dist/
+frontend/.vite/
+
+# PlatformIO (ESP32)
+esp32/.pio/
+esp32/.vscode/
+
+# Wokwi (binários compilados)
+*.bin
+*.elf
+
+# Docker
+mosquitto/data/
+mosquitto/log/
+
+# Logs
+*.log
+logs/
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# VS Code
+.vscode/
+!.vscode/extensions.json

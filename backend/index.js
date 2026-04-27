@@ -6,7 +6,7 @@ const app = express()
 app.use(cors())
 app.use(express.json())
 
-// mesmo broker do Wokwi
+
 const client = mqtt.connect('mqtt://broker.hivemq.com:1883')
 let ledState  = false
 
