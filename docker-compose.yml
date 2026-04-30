@@ -1,31 +1,49 @@
 
 
 services:
+  db:
+    image: postgres:15-alpine
+    container_name: db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: casa_inteligente
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
   mosquitto:
     image: eclipse-mosquitto
     container_name: mosquitto
+    restart: unless-stopped
     ports:
       - "1883:1883"
     volumes:
       - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
-    restart: unless-stopped
 
   backend:
     build: ./backend
     container_name: backend
+    restart: unless-stopped
     ports:
       - "3001:3001"
     environment:
-      - MQTT_BROKER=mqtt://mosquitto:1883
+      - MQTT_BROKER=mqtt://broker.hivemq.com:1883
+      - DATABASE_URL=postgresql://user:password@db:5432/casa_inteligente?schema=public
     depends_on:
       - mosquitto
-    restart: unless-stopped
+      - db
 
   frontend:
     build: ./frontend
     container_name: frontend
+    restart: unless-stopped
     ports:
       - "5173:5173"
     depends_on:
       - backend
-    restart: unless-stopped
+
+volumes:
+  postgres_data:

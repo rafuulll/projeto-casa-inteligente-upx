@@ -1,31 +1,32 @@
 {
   "version": 1,
   "parts": [
-    {
-      "type": "wokwi-esp32-devkit-v1",
-      "id": "esp",
-      "top": 0,
-      "left": 0,
-      "attrs": {}
-    },
-    {
-      "type": "wokwi-resistor",
-      "id": "r1",
-      "top": -60,
-      "left": 80,
-      "attrs": { "value": "220" }
-    },
-    {
-      "type": "wokwi-led",
-      "id": "led1",
-      "top": -60,
-      "left": 200,
-      "attrs": { "color": "red" }
-    }
+    { "type": "wokwi-esp32-devkit-v1", "id": "esp", "top": 80, "left": 0, "attrs": {} },
+
+    { "type": "wokwi-resistor", "id": "r1", "top": 0,   "left": 300, "attrs": { "value": "220" } },
+    { "type": "wokwi-led",      "id": "l1", "top": 0,   "left": 370, "attrs": { "color": "yellow", "label": "Sala Luz" } },
+
+    { "type": "wokwi-resistor", "id": "r2", "top": 60,  "left": 300, "attrs": { "value": "220" } },
+    { "type": "wokwi-led",      "id": "l2", "top": 60,  "left": 370, "attrs": { "color": "blue",   "label": "Ventilador" } },
+
+    { "type": "wokwi-resistor", "id": "r3", "top": 120, "left": 300, "attrs": { "value": "220" } },
+    { "type": "wokwi-led",      "id": "l3", "top": 120, "left": 370, "attrs": { "color": "yellow", "label": "Quarto Luz" } },
+
+    { "type": "wokwi-resistor", "id": "r4", "top": 180, "left": 300, "attrs": { "value": "220" } },
+    { "type": "wokwi-led",      "id": "l4", "top": 180, "left": 370, "attrs": { "color": "cyan",   "label": "Ar-cond" } },
+
+    { "type": "wokwi-resistor", "id": "r5", "top": 240, "left": 300, "attrs": { "value": "220" } },
+    { "type": "wokwi-led",      "id": "l5", "top": 240, "left": 370, "attrs": { "color": "yellow", "label": "Cozinha Luz" } },
+
+    { "type": "wokwi-resistor", "id": "r6", "top": 300, "left": 300, "attrs": { "value": "220" } },
+    { "type": "wokwi-led",      "id": "l6", "top": 300, "left": 370, "attrs": { "color": "green",  "label": "Cafeteira" } }
   ],
   "connections": [
-    [ "esp:D2", "r1:1", "green", [] ],
-    [ "r1:2", "led1:A", "green", [] ],
-    [ "led1:C", "esp:GND.1", "black", [] ]
+    [ "esp:D2",  "r1:1", "yellow", [] ], [ "r1:2", "l1:A", "yellow", [] ], [ "l1:C", "esp:GND.1", "black", [] ],
+    [ "esp:D4",  "r2:1", "blue",   [] ], [ "r2:2", "l2:A", "blue",   [] ], [ "l2:C", "esp:GND.1", "black", [] ],
+    [ "esp:D5",  "r3:1", "yellow", [] ], [ "r3:2", "l3:A", "yellow", [] ], [ "l3:C", "esp:GND.2", "black", [] ],
+    [ "esp:D18", "r4:1", "cyan",   [] ], [ "r4:2", "l4:A", "cyan",   [] ], [ "l4:C", "esp:GND.2", "black", [] ],
+    [ "esp:D19", "r5:1", "yellow", [] ], [ "r5:2", "l5:A", "yellow", [] ], [ "l5:C", "esp:GND.2", "black", [] ],
+    [ "esp:D21", "r6:1", "green",  [] ], [ "r6:2", "l6:A", "green",  [] ], [ "l6:C", "esp:GND.2", "black", [] ]
   ]
 }
