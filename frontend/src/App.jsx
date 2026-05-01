@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { io } from 'socket.io-client'
 
 const socket = io('http://localhost:3001')
@@ -43,9 +43,9 @@ const ROOM_ICONS = { Sala: '🛋️', Quarto: '🛏️', Cozinha: '🍳' }
 
 const ACCENT = {
   light: { on: '#fbbf24', glow: 'rgba(251,191,36,0.2)' },
-  fan:   { on: '#60a5fa', glow: 'rgba(96,165,250,0.2)' },
-  ac:    { on: '#67e8f9', glow: 'rgba(103,232,249,0.2)' },
-  plug:  { on: '#86efac', glow: 'rgba(134,239,172,0.2)' },
+  fan: { on: '#60a5fa', glow: 'rgba(96,165,250,0.2)' },
+  ac: { on: '#67e8f9', glow: 'rgba(103,232,249,0.2)' },
+  plug: { on: '#86efac', glow: 'rgba(134,239,172,0.2)' },
 }
 
 // ── Estilos ────────────────────────────────────────────────────────────────────
@@ -81,6 +81,29 @@ const css = `
   .logo-icon { font-size: 30px; width: 54px; height: 54px; background: var(--s1); border: 1px solid var(--border); border-radius: 16px; display: flex; align-items: center; justify-content: center; }
   .logo h1 { font-size: 22px; font-weight: 700; }
   .logo p  { font-size: 12px; color: var(--muted); margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
+
+  /* chat floating */
+  .chat-btn { position: fixed; bottom: 28px; right: 28px; z-index: 100; width: 56px; height: 56px; border-radius: 50%; background: var(--accent); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 22px; box-shadow: 0 8px 24px rgba(99,102,241,.5); transition: transform .2s, box-shadow .2s; }
+  .chat-btn:hover { transform: scale(1.08); box-shadow: 0 12px 32px rgba(99,102,241,.6); }
+  .chat-panel { position: fixed; bottom: 96px; right: 28px; z-index: 100; width: 380px; max-height: 520px; background: #0f0f1a; border: 1px solid rgba(99,102,241,.3); border-radius: 24px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,.6); animation: popUp .25s ease; }
+  @keyframes popUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+  .chat-head { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  .chat-head-icon { font-size: 18px; }
+  .chat-head-info strong { font-size: 14px; font-weight: 600; display: block; }
+  .chat-head-info span { font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+  .chat-msgs { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .chat-msgs::-webkit-scrollbar { width: 4px; } .chat-msgs::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  .bubble { max-width: 85%; padding: 10px 14px; border-radius: 16px; font-size: 13.5px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+  .bubble.user { background: var(--accent); color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
+  .bubble.ai { background: var(--s2); color: var(--text); align-self: flex-start; border-bottom-left-radius: 4px; }
+  .bubble.loading { color: var(--muted); font-style: italic; }
+  .chat-input { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
+  .chat-input input { flex: 1; background: var(--s1); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; color: var(--text); font-size: 13px; font-family: 'Inter', sans-serif; outline: none; transition: border-color .2s; }
+  .chat-input input:focus { border-color: var(--accent); }
+  .chat-input input::placeholder { color: var(--muted); }
+  .chat-send { width: 38px; height: 38px; border-radius: 10px; background: var(--accent); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: opacity .2s; }
+  .chat-send:disabled { opacity: .4; cursor: not-allowed; }
+  .chat-send svg { width: 16px; height: 16px; stroke: white; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .header-right { display: flex; align-items: center; gap: 12px; }
   .chip { background: var(--s1); border: 1px solid var(--border); border-radius: 99px; padding: 8px 16px; font-size: 13px; }
   .chip strong { color: var(--accent); }
@@ -129,6 +152,9 @@ const css = `
 
   /* logs */
   .logs { background: var(--s1); border: 1px solid var(--border); border-radius: 24px; padding: 28px; }
+  .log-list { max-height: 320px; overflow-y: auto; padding-right: 8px; }
+  .log-list::-webkit-scrollbar { width: 4px; }
+  .log-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
   .logs-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
   .logs-head h2 { font-size: 16px; font-weight: 600; }
   .logs-badge { font-size: 11px; font-family: 'JetBrains Mono', monospace; color: var(--muted); background: var(--s2); border: 1px solid var(--border); padding: 4px 10px; border-radius: 99px; }
@@ -150,9 +176,15 @@ const css = `
 // ── Componente ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [devices, setDevices] = useState([])   // lista flat do banco
-  const [logs,    setLogs]    = useState([])
-  const [conn,    setConn]    = useState(false)
+  const [logs, setLogs] = useState([])
+  const [conn, setConn] = useState(false)
   const [loading, setLoading] = useState({})
+  // Chat IA
+  const [chatOpen, setChatOpen] = useState(false)
+  const [chatMsgs, setChatMsgs] = useState([{ role: 'ai', text: 'Olá! Sou o assistente da Casa Inteligente. Posso ligar/desligar dispositivos, controlar cômodos inteiros e agendar ações. Como posso ajudar?' }])
+  const [chatInput, setChatInput] = useState('')
+  const [chatBusy, setChatBusy] = useState(false)
+  const chatEndRef = useRef(null)
 
   // Agrupa devices por cômodo
   const rooms = devices.reduce((acc, d) => {
@@ -168,15 +200,15 @@ export default function App() {
     fetch('http://localhost:3001/api/devices')
       .then(r => r.json())
       .then(setDevices)
-      .catch(() => {})
+      .catch(() => { })
 
     fetch('http://localhost:3001/api/logs')
       .then(r => r.json())
       .then(setLogs)
-      .catch(() => {})
+      .catch(() => { })
 
     // Socket.io — eventos em tempo real
-    socket.on('connect',    () => setConn(true))
+    socket.on('connect', () => setConn(true))
     socket.on('disconnect', () => setConn(false))
 
     socket.on('device_update', (updated) => {
@@ -197,9 +229,34 @@ export default function App() {
     if (loading[id]) return
     setLoading(p => ({ ...p, [id]: true }))
     await fetch(`http://localhost:3001/api/devices/${id}/toggle`, { method: 'POST' })
-      .catch(() => {})
+      .catch(() => { })
     setLoading(p => ({ ...p, [id]: false }))
   }
+
+  const sendMessage = async () => {
+    const text = chatInput.trim()
+    if (!text || chatBusy) return
+    setChatInput('')
+    setChatMsgs(p => [...p, { role: 'user', text }])
+    setChatBusy(true)
+    setChatMsgs(p => [...p, { role: 'ai', text: '...', loading: true }])
+    try {
+      const res = await fetch('http://localhost:3001/api/ai/chat', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text })
+      })
+      const data = await res.json()
+      setChatMsgs(p => [...p.slice(0, -1), { role: 'ai', text: data.reply || data.error }])
+    } catch {
+      setChatMsgs(p => [...p.slice(0, -1), { role: 'ai', text: 'Erro ao conectar com a IA.' }])
+    }
+    setChatBusy(false)
+  }
+
+  // Auto-scroll no chat
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [chatMsgs])
 
   return (
     <>
@@ -213,7 +270,7 @@ export default function App() {
             <div className="logo-icon">🏠</div>
             <div>
               <h1>Casa Inteligente</h1>
-              <p>ESP32 · MQTT · PostgreSQL · Socket.io — nível 02</p>
+              <p>ESP32 · MQTT · PostgreSQL · Socket.io · Grok AI — nível 03</p>
             </div>
           </div>
           <div className="header-right">
@@ -280,6 +337,7 @@ export default function App() {
               <span className="logs-badge">{logs.length} registros</span>
             </div>
 
+          <div className="log-list">
             {logs.length === 0
               ? <div className="log-empty">Nenhuma ação registrada ainda.</div>
               : logs.map((l) => (
@@ -292,17 +350,54 @@ export default function App() {
                   <span className={`log-action ${l.action === 'ON' ? 'on' : 'off'}`}>
                     {l.action === 'ON' ? 'Ligado' : 'Desligado'}
                   </span>
-                </div>
+                </div>              
               ))
             }
+          </div>
           </div>
         </main>
 
         <footer>
           <span>Casa Inteligente UPX · 2025</span>
-          <span>React + Node.js + PostgreSQL + MQTT + Socket.io</span>
+          <span>React + Node.js + PostgreSQL + MQTT + Socket.io + Grok AI</span>
         </footer>
       </div>
+
+      {/* ── Chat IA ────────────────────────────────── */}
+      {chatOpen && (
+        <div className="chat-panel">
+          <div className="chat-head">
+            <span className="chat-head-icon">🤖</span>
+            <div className="chat-head-info">
+              <strong>Assistente IA</strong>
+              <span>Grok · xAI — controle por voz</span>
+            </div>
+          </div>
+          <div className="chat-msgs">
+            {chatMsgs.map((m, i) => (
+              <div key={i} className={`bubble ${m.role} ${m.loading ? 'loading' : ''}`}>
+                {m.text}
+              </div>
+            ))}
+            <div ref={chatEndRef} />
+          </div>
+          <div className="chat-input">
+            <input
+              placeholder="Ex: desligue tudo às 23:30..."
+              value={chatInput}
+              onChange={e => setChatInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && sendMessage()}
+              disabled={chatBusy}
+            />
+            <button className="chat-send" onClick={sendMessage} disabled={chatBusy}>
+              <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
+            </button>
+          </div>
+        </div>
+      )}
+      <button className="chat-btn" onClick={() => setChatOpen(o => !o)} title="Assistente IA">
+        {chatOpen ? '✕' : '🤖'}
+      </button>
     </>
   )
 }
