@@ -2,8 +2,6 @@
  
 Sistema de controle residencial com ESP32, MQTT, React e Inteligência Artificial.
  
-> **Nível 01 — Protótipo:** controle de dispositivos via web com comunicação MQTT em tempo real.
- 
 ---
  
 ## 📋 Sobre o projeto
@@ -65,8 +63,19 @@ git clone https://github.com/rafuulll/projeto-casa-inteligente.git
 cd projeto-casa-inteligente
 ```
  
-### Passo 2 — Suba o Docker
+### Passo 2 — Configure as Variáveis de Ambiente
 
+Para o Chat com Inteligência Artificial funcionar, o backend precisa da sua chave de API.
+Copie o arquivo de exemplo na pasta `backend`:
+
+```bash
+cd backend
+cp .env.example .env
+```
+> Abra o arquivo `backend/.env` que acabou de ser criado e preencha a variável `GROQ_API_KEY` com sua chave (obtida no console da plataforma escolhida). Volte para a raiz (`cd ..`) antes de continuar.
+ 
+### Passo 3 — Suba o Docker
+ 
 ```bash
 docker-compose up --build
 ```
@@ -75,7 +84,7 @@ docker-compose up --build
  
 Após subir, acesse o dashboard em **http://localhost:5173**
  
-### Passo 3 — Abra a pasta do ESP32 no VS Code
+### Passo 4 — Abra a pasta do ESP32 no VS Code
  
 > ⚠️ **Importante:** o PlatformIO só reconhece o projeto se você abrir **especificamente a pasta `esp32/`** no VS Code. Se abrir a pasta raiz do projeto, o PlatformIO não vai encontrar o `platformio.ini` e o comando Build não vai aparecer.
  
@@ -83,7 +92,7 @@ Após subir, acesse o dashboard em **http://localhost:5173**
 Arquivo → Abrir Pasta → seleciona a pasta esp32/
 ```
  
-### Passo 4 — Aguarde o PlatformIO inicializar
+### Passo 5 — Aguarde o PlatformIO inicializar
  
 Na primeira vez em uma máquina nova, o PlatformIO precisa baixar as ferramentas do ESP32. Aguarde alguns minutos até aparecer os ícones na barra inferior do VS Code:
  
@@ -91,7 +100,7 @@ Na primeira vez em uma máquina nova, o PlatformIO precisa baixar as ferramentas
 ✔ Build   → Upload   🔌 Serial Monitor
 ```
  
-### Passo 5 — Compile o firmware do ESP32
+### Passo 6 — Compile o firmware do ESP32
  
 ```
 Ctrl+Shift+P → PlatformIO: Build
@@ -101,7 +110,7 @@ Ou clique no ícone ✔ na barra inferior do VS Code. Aguarde aparecer `SUCCESS`
  
 > Se o comando `PlatformIO: Build` não aparecer no `Ctrl+Shift+P`, clique no ícone do PlatformIO (👾 alienígena) na barra lateral → Project Tasks → esp32dev → General → Build.
  
-### Passo 6 — Inicie o simulador Wokwi
+### Passo 7 — Inicie o simulador Wokwi
  
 ```
 F1 → Wokwi: Start Simulator
@@ -109,20 +118,21 @@ F1 → Wokwi: Start Simulator
  
 Ou abra o arquivo `diagram.json` e clique em **Play**.
  
-### Passo 7 — Teste o sistema
+### Passo 8 — Teste o sistema
  
-Com tudo rodando, acesse **http://localhost:5173** e clique no botão de ligar/desligar. O LED no simulador Wokwi deve acender e apagar.
+Com tudo rodando, acesse **http://localhost:5173**, teste os botões e converse com a IA para controlar os dispositivos.
  
 ---
  
 ## 🔁 Resumo da ordem de inicialização
  
 ```
-1. docker-compose up --build       → sobe backend + frontend + MQTT
-2. Abrir pasta esp32/ no VS Code   → reconhece o platformio.ini
-3. PlatformIO: Build               → compila o firmware (aguarda SUCCESS)
-4. Wokwi: Start Simulator          → simula o ESP32 com o LED
-5. Acessar localhost:5173          → dashboard web funcionando
+1. Configurar backend/.env         → Adicionar chave da API de IA
+2. docker-compose up --build       → Sobe backend + frontend + banco + MQTT
+3. Abrir pasta esp32/ no VS Code   → Reconhece o platformio.ini
+4. PlatformIO: Build               → Compila o firmware (aguarda SUCCESS)
+5. Wokwi: Start Simulator          → Simula o ESP32
+6. Acessar localhost:5173          → Dashboard web com IA funcionando
 ```
  
 ---
@@ -169,8 +179,8 @@ docker-compose restart backend
 ## 🗺️ Roadmap
  
 - [x] Nível 01 — Controle de LED via web + MQTT
-- [ ] Nível 02 — Múltiplos dispositivos + banco de dados + dashboard
-- [ ] Nível 03 — Chat com IA + automações por linguagem natural
+- [x] Nível 02 — Múltiplos dispositivos + banco de dados + dashboard
+- [x] Nível 03 — Chat com IA + automações por linguagem natural
 - [ ] Nível 04 — Integração WhatsApp + automações por horário
 ---
  
