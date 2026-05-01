@@ -1,6 +1,6 @@
 {
   "name": "backend",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -12,10 +12,14 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@prisma/client": "^5.13.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
+    "groq-sdk": "^1.1.2",
     "mqtt": "^5.15.1",
+    "node-schedule": "^2.1.1",
+    "openai": "^4.47.1",
     "socket.io": "^4.7.5"
   },
   "devDependencies": {

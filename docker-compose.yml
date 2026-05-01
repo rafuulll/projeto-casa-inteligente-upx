@@ -32,6 +32,7 @@ services:
     environment:
       - MQTT_BROKER=mqtt://broker.hivemq.com:1883
       - DATABASE_URL=postgresql://user:password@db:5432/casa_inteligente?schema=public
+      - GROQ_API_KEY=${GROQ_API_KEY}
     depends_on:
       - mosquitto
       - db
