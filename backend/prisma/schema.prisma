@@ -22,5 +22,14 @@ model Log {
   deviceId  String
   device    Device   @relation(fields: [deviceId], references: [id])
   action    String
+  source    String   @default("manual")
   createdAt DateTime @default(now())
+}
+
+model Telemetry {
+  id          Int      @id @default(autoincrement())
+  temperature Float?
+  humidity    Float?
+  movement    Boolean?
+  createdAt   DateTime @default(now())
 }
