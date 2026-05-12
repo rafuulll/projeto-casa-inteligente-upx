@@ -4,6 +4,32 @@ Sistema de automação residencial completo com ESP32, sensores físicos, IA loc
 
 ---
 
+## Diferenciais do projeto
+
+### Modo Local — funciona sem servidor
+
+| | |
+|---|---|
+| **IA Embarcada** | Aprende os hábitos do usuário diretamente no ESP32, sem precisar de servidor ou internet |
+| **Múltiplos Sensores** | DHT22 (temperatura/umidade), PIR (movimento), HC-SR04 (distância), Servo (porta) e Display OLED |
+| **Funciona Offline** | WiFi indisponível? O ESP32 continua operando — sensores, automações, IA local e display funcionam normalmente |
+| **Simplicidade** | Um único dispositivo faz tudo: lê sensores, toma decisões, aciona atuadores e exibe status |
+| **Display Local** | Feedback visual imediato no OLED 128×64px: temperatura, umidade, estados e status da IA |
+| **Baixo Custo** | Hardware completo por aproximadamente R$ 220 — sem mensalidade, sem assinatura, software 100% gratuito |
+
+### Modo Conectado — quando há internet
+
+| | |
+|---|---|
+| **Dashboard Web** | Interface moderna em React com dark mode, cards de sensores em tempo real, gráficos e controles |
+| **Controle Remoto** | Acessa e controla a casa de qualquer lugar via dashboard web ou chat com IA |
+| **Chat com IA** | Linguagem natural em português — *"acende a luz da sala"*, *"desligue tudo às 23h"*, *"qual a temperatura?"* |
+| **Escalável** | Fácil adicionar novos dispositivos: basta incluir no seed do banco e no mapeamento MQTT |
+| **Profissional** | Arquitetura moderna com Docker Compose, MQTT, WebSocket, Prisma ORM e PostgreSQL |
+| **Banco de Dados** | Histórico completo de comandos, leituras de sensores e conversas com a IA |
+
+---
+
 ## Sumário
 
 - [Sobre o projeto](#sobre-o-projeto)
