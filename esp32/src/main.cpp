@@ -161,9 +161,6 @@ void iaAprenderPadroes() {
 
 void atualizarDisplay() {
   display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(SSD1306_WHITE);
-
   display.setCursor(0, 0);
   display.println("=== SMART HOME v3 ===");
 
@@ -297,6 +294,8 @@ void setup() {
     display.setTextSize(1);
     display.setCursor(28, 48);
     display.println("iniciando...");
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
     display.display();
     Serial.println("[OK] OLED iniciado");
   }
@@ -351,8 +350,6 @@ void loop() {
 
   if (!modoOffline && client.connected()) client.loop();
 
-  unsigned long agora = millis();
-
   // Fecha porta automaticamente após timeout
   if (portaTimer && (agora - tPortaAberta >= PORTA_TIMEOUT)) {
     fecharPorta();
@@ -380,7 +377,7 @@ void loop() {
       if (movimentoAtivo) {
         digitalWrite(LED_PIN, HIGH);
         if (modoSeguranca) ativarAlarme();
-        else               ligarLuz(true);
+        else { ligarLuz(true); bip(); }
         Serial.println("[PIR] Movimento detectado!");
       } else {
         digitalWrite(LED_PIN, LOW);

@@ -1,5 +1,6 @@
-const Groq     = require('groq-sdk')
-const schedule = require('node-schedule')
+const Groq            = require('groq-sdk')
+const schedule        = require('node-schedule')
+const { DEVICE_MQTT } = require('./config')
 
 // ── Groq lazy init ────────────────────────────────────────────────────────────
 let _groq = null
@@ -25,14 +26,6 @@ let _telemetry = { temperature: null, humidity: null, movement: false, iaStatus:
 
 function updateTelemetry(data) {
   _telemetry = { ..._telemetry, ...data }
-}
-
-// ── Mapeamento de tópicos MQTT por dispositivo ────────────────────────────────
-const DEVICE_MQTT = {
-  'sala-luz':   { topic: 'casa/luz/comando',        on: 'ON',      off: 'OFF'       },
-  'ventilador': { topic: 'casa/ventilador/comando', on: 'ON',      off: 'OFF'       },
-  'porta':      { topic: 'casa/porta/comando',      on: 'ABRIR',   off: 'FECHAR'    },
-  'alarme':     { topic: 'casa/alarme/comando',     on: 'ATIVAR',  off: 'DESATIVAR' },
 }
 
 // ── Ferramentas disponíveis para o Groq ──────────────────────────────────────
@@ -147,7 +140,7 @@ async function executeTool(name, args) {
   switch (name) {
 
     case 'control_device': {
-      const ids     = args.deviceIds || (args.deviceId ? [args.deviceId] : [])
+      const ids     = args.deviceIds || []
       const results = await Promise.all(ids.map(id => applyDeviceState(id, args.state)))
       const changed = results.filter(Boolean)
       return changed.length > 0
@@ -174,8 +167,7 @@ async function executeTool(name, args) {
       const executeFn = async () => {
         console.log(`[Agendamento] Executando: ${args.action}`)
         if (args.action === 'control_device') {
-          const ids = args.deviceIds || (args.deviceId ? [args.deviceId] : [])
-          await Promise.all(ids.map(id => applyDeviceState(id, args.state)))
+          await Promise.all((args.deviceIds || []).map(id => applyDeviceState(id, args.state)))
         } else if (args.action === 'control_all_devices') {
           const all = await _prisma.device.findMany()
           await Promise.all(all.map(d => applyDeviceState(d.id, args.state)))

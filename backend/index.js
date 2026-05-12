@@ -4,7 +4,8 @@ const { Server } = require('socket.io')
 const mqtt       = require('mqtt')
 const cors       = require('cors')
 const { PrismaClient } = require('@prisma/client')
-const aiService  = require('./aiService')
+const aiService       = require('./aiService')
+const { DEVICE_MQTT } = require('./config')
 
 const prisma = new PrismaClient()
 const app    = express()
@@ -13,14 +14,6 @@ const io     = new Server(server, { cors: { origin: '*' } })
 
 app.use(cors())
 app.use(express.json())
-
-// ── Mapeamento dispositivo → tópico MQTT ──────────────────────────────────────
-const DEVICE_MQTT = {
-  'sala-luz':   { topic: 'casa/luz/comando',        on: 'ON',      off: 'OFF'       },
-  'ventilador': { topic: 'casa/ventilador/comando', on: 'ON',      off: 'OFF'       },
-  'porta':      { topic: 'casa/porta/comando',      on: 'ABRIR',   off: 'FECHAR'    },
-  'alarme':     { topic: 'casa/alarme/comando',     on: 'ATIVAR',  off: 'DESATIVAR' },
-}
 
 // ── Telemetria em memória ─────────────────────────────────────────────────────
 let latestTelemetry = {
@@ -112,14 +105,6 @@ mqttClient.on('message', async (topic, message) => {
   if (topic === 'casa/alarme') {
     console.log(`ALARME ESP32: ${val}`)
     io.emit('alarme', { event: val, timestamp: new Date() })
-    return
-  }
-
-  // Confirmações de status dos dispositivos
-  const parts = topic.split('/')
-  if (parts.length === 3 && parts[2] === 'status') {
-    const deviceKey = parts[1] === 'luz' ? 'sala-luz' : parts[1]
-    console.log(`ESP32 confirmou [${deviceKey}]: ${val}`)
   }
 })
 
