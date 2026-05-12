@@ -1,15 +1,15 @@
-const Groq            = require('groq-sdk')
+const Anthropic       = require('@anthropic-ai/sdk')
 const schedule        = require('node-schedule')
 const { DEVICE_MQTT } = require('./config')
 
-// ── Groq lazy init ────────────────────────────────────────────────────────────
-let _groq = null
-function getGroq() {
-  if (!_groq) {
-    if (!process.env.GROQ_API_KEY) throw new Error('GROQ_API_KEY não configurada.')
-    _groq = new Groq({ apiKey: process.env.GROQ_API_KEY })
+// ── Claude (Anthropic) lazy init ──────────────────────────────────────────────
+let _anthropic = null
+function getAnthropic() {
+  if (!_anthropic) {
+    if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY não configurada.')
+    _anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   }
-  return _groq
+  return _anthropic
 }
 
 // ── Dependências injetadas pelo servidor ──────────────────────────────────────
@@ -28,91 +28,73 @@ function updateTelemetry(data) {
   _telemetry = { ..._telemetry, ...data }
 }
 
-// ── Ferramentas disponíveis para o Groq ──────────────────────────────────────
+// ── Ferramentas disponíveis para o Claude ─────────────────────────────────────
 const tools = [
   {
-    type: 'function',
-    function: {
-      name: 'control_device',
-      description: 'Liga ou desliga um ou mais dispositivos específicos da casa.',
-      parameters: {
-        type: 'object',
-        properties: {
-          deviceIds: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Lista de IDs: "sala-luz", "ventilador", "porta", "alarme"'
-          },
-          state: { type: 'boolean', description: 'true para ligar/abrir/ativar, false para desligar/fechar/desativar' }
+    name: 'control_device',
+    description: 'Liga ou desliga um ou mais dispositivos específicos da casa.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        deviceIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Lista de IDs: "sala-luz", "ventilador", "porta", "alarme"'
         },
-        required: ['deviceIds', 'state']
-      }
+        state: { type: 'boolean', description: 'true para ligar/abrir/ativar, false para desligar/fechar/desativar' }
+      },
+      required: ['deviceIds', 'state']
     }
   },
   {
-    type: 'function',
-    function: {
-      name: 'control_all_devices',
-      description: 'Liga ou desliga TODOS os dispositivos da casa de uma vez.',
-      parameters: {
-        type: 'object',
-        properties: {
-          state: { type: 'boolean', description: 'true para ligar todos, false para desligar todos' }
-        },
-        required: ['state']
-      }
+    name: 'control_all_devices',
+    description: 'Liga ou desliga TODOS os dispositivos da casa de uma vez.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        state: { type: 'boolean', description: 'true para ligar todos, false para desligar todos' }
+      },
+      required: ['state']
     }
   },
   {
-    type: 'function',
-    function: {
-      name: 'control_room',
-      description: 'Liga ou desliga todos os dispositivos de um cômodo.',
-      parameters: {
-        type: 'object',
-        properties: {
-          room:  { type: 'string',  description: 'Nome do cômodo: Sala, Entrada ou Casa' },
-          state: { type: 'boolean', description: 'true para ligar, false para desligar' }
-        },
-        required: ['room', 'state']
-      }
+    name: 'control_room',
+    description: 'Liga ou desliga todos os dispositivos de um cômodo.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        room:  { type: 'string',  description: 'Nome do cômodo: Sala, Entrada ou Casa' },
+        state: { type: 'boolean', description: 'true para ligar, false para desligar' }
+      },
+      required: ['room', 'state']
     }
   },
   {
-    type: 'function',
-    function: {
-      name: 'schedule_action',
-      description: 'Agenda uma ação para o futuro (horário específico ou daqui a X segundos/minutos).',
-      parameters: {
-        type: 'object',
-        properties: {
-          delay_seconds: { type: 'number', description: 'Para agendamentos relativos. Ex: "daqui 30 segundos" → 30' },
-          time:          { type: 'string', description: 'Horário exato no formato HH:MM (24h). Ex: "23:30"' },
-          action:        { type: 'string', description: 'Qual ação: control_device, control_all_devices ou control_room' },
-          deviceIds:     { type: 'array', items: { type: 'string' }, description: 'IDs dos dispositivos (se action=control_device)' },
-          room:          { type: 'string', description: 'Cômodo (se action=control_room)' },
-          state:         { type: 'boolean', description: 'true para ligar, false para desligar' },
-          repeat:        { type: 'boolean', description: 'true para repetir todo dia no horário "time"' }
-        },
-        required: ['action', 'state']
-      }
+    name: 'schedule_action',
+    description: 'Agenda uma ação para o futuro (horário específico ou daqui a X segundos/minutos).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        delay_seconds: { type: 'number', description: 'Para agendamentos relativos. Ex: "daqui 30 segundos" → 30' },
+        time:          { type: 'string', description: 'Horário exato no formato HH:MM (24h). Ex: "23:30"' },
+        action:        { type: 'string', description: 'Qual ação: control_device, control_all_devices ou control_room' },
+        deviceIds:     { type: 'array', items: { type: 'string' }, description: 'IDs dos dispositivos (se action=control_device)' },
+        room:          { type: 'string', description: 'Cômodo (se action=control_room)' },
+        state:         { type: 'boolean', description: 'true para ligar, false para desligar' },
+        repeat:        { type: 'boolean', description: 'true para repetir todo dia no horário "time"' }
+      },
+      required: ['action', 'state']
     }
   },
   {
-    type: 'function',
-    function: {
-      name: 'get_status',
-      description: 'Retorna o estado atual de todos os dispositivos da casa.',
-      parameters: { type: 'object', properties: {} }
-    }
+    name: 'get_status',
+    description: 'Retorna o estado atual de todos os dispositivos da casa.',
+    input_schema: { type: 'object', properties: {} }
   },
   {
-    type: 'function',
-    function: {
-      name: 'get_sensor_data',
-      description: 'Retorna as leituras atuais dos sensores: temperatura, umidade e movimento.',
-      parameters: { type: 'object', properties: {} }
-    }
+    name: 'get_sensor_data',
+    description: 'Retorna as leituras atuais dos sensores: temperatura, umidade e movimento.',
+    input_schema: { type: 'object', properties: {} }
   }
 ]
 
@@ -217,11 +199,10 @@ async function executeTool(name, args) {
     }
 
     case 'get_sensor_data': {
-      const t = _telemetry.temperature !== null ? `${_telemetry.temperature}°C` : 'sem leitura'
-      const h = _telemetry.humidity    !== null ? `${_telemetry.humidity}%`     : 'sem leitura'
-      const m = _telemetry.movement ? 'detectado' : 'nenhum'
-      const ia = _telemetry.iaStatus
-      return `Sensores: Temperatura=${t}, Umidade=${h}, Movimento=${m}, IA Local=${ia}`
+      const t  = _telemetry.temperature !== null ? `${_telemetry.temperature}°C` : 'sem leitura'
+      const h  = _telemetry.humidity    !== null ? `${_telemetry.humidity}%`     : 'sem leitura'
+      const m  = _telemetry.movement ? 'detectado' : 'nenhum'
+      return `Sensores: Temperatura=${t}, Umidade=${h}, Movimento=${m}, IA Local=${_telemetry.iaStatus}`
     }
 
     default:
@@ -236,16 +217,12 @@ async function handleChat(userMessage) {
     `- ID: "${d.id}" | Nome: "${d.name}" | Cômodo: ${d.room} | Estado: ${d.state ? 'LIGADO' : 'DESLIGADO'}`
   ).join('\n')
 
-  const now      = new Date()
-  const horaBRT  = now.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })
-  const tempInfo = _telemetry.temperature !== null
-    ? `${_telemetry.temperature}°C`
-    : 'sem leitura (ESP32 desconectado)'
-  const humInfo  = _telemetry.humidity !== null
-    ? `${_telemetry.humidity}%`
-    : 'sem leitura'
+  const now     = new Date()
+  const horaBRT = now.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })
+  const tempInfo = _telemetry.temperature !== null ? `${_telemetry.temperature}°C` : 'sem leitura (ESP32 desconectado)'
+  const humInfo  = _telemetry.humidity    !== null ? `${_telemetry.humidity}%`     : 'sem leitura'
 
-  const systemPrompt = `Você é o assistente inteligente da Casa Inteligente (Smart Home Híbrido v3.0).
+  const system = `Você é o assistente inteligente da Casa Inteligente (Smart Home Híbrido v3.0).
 Responda sempre em português brasileiro de forma natural, curta e amigável.
 A hora atual é: ${horaBRT} (Horário de Brasília).
 
@@ -267,49 +244,56 @@ REGRAS CRÍTICAS:
 6. Para perguntas sobre temperatura/sensores: chame "get_sensor_data".
 7. Após executar, confirme em uma frase curta. Não liste JSONs ou nomes de funções ao usuário.`
 
-  const messages = [
-    { role: 'system', content: systemPrompt },
-    { role: 'user',   content: userMessage  }
-  ]
+  const messages = [{ role: 'user', content: userMessage }]
 
   try {
-    const response = await getGroq().chat.completions.create({
-      model:       'llama-3.3-70b-versatile',
+    const response = await getAnthropic().messages.create({
+      model:      'claude-opus-4-7',
+      max_tokens: 1024,
+      system,
       messages,
       tools,
-      tool_choice: 'auto',
     })
 
-    const msg = response.choices[0].message
+    const toolUseBlocks = response.content.filter(b => b.type === 'tool_use')
 
-    if (msg.tool_calls && msg.tool_calls.length > 0) {
-      messages.push(msg)
+    if (toolUseBlocks.length > 0) {
+      // Adiciona resposta do assistente (com os blocos tool_use) ao histórico
+      messages.push({ role: 'assistant', content: response.content })
 
+      // Executa as ferramentas e coleta os resultados
       const toolResults = await Promise.all(
-        msg.tool_calls.map(async (tc) => {
+        toolUseBlocks.map(async (block) => {
           let result
           try {
-            const args = JSON.parse(tc.function.arguments)
-            result = await executeTool(tc.function.name, args)
+            // block.input já é objeto parsed — sem necessidade de JSON.parse
+            result = await executeTool(block.name, block.input)
           } catch (e) {
             console.error('Erro tool call:', e)
             result = 'Erro interno ao executar a ação.'
           }
-          return { role: 'tool', tool_call_id: tc.id, content: result }
+          return { type: 'tool_result', tool_use_id: block.id, content: result }
         })
       )
 
-      messages.push(...toolResults)
+      // Envia resultados como mensagem do usuário
+      messages.push({ role: 'user', content: toolResults })
 
-      const final = await getGroq().chat.completions.create({
-        model:    'llama-3.3-70b-versatile',
+      // Segunda chamada para resposta final
+      const final = await getAnthropic().messages.create({
+        model:      'claude-opus-4-7',
+        max_tokens: 1024,
+        system,
         messages,
+        tools,
       })
 
-      return final.choices[0].message.content || 'Ação executada! ✓'
+      const textBlock = final.content.find(b => b.type === 'text')
+      return textBlock?.text || 'Ação executada! ✓'
     }
 
-    return msg.content || 'Pronto!'
+    const textBlock = response.content.find(b => b.type === 'text')
+    return textBlock?.text || 'Pronto!'
   } catch (error) {
     console.error('Erro de IA:', error.message || error)
     return 'Desculpe, houve uma falha de comunicação com a IA. Tente novamente.'

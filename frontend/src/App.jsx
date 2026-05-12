@@ -652,7 +652,7 @@ export default function App() {
 
         <footer>
           <span>Smart Home Híbrido UPX · 2025</span>
-          <span>React · Node.js · PostgreSQL · MQTT · Socket.io · Groq AI</span>
+          <span>React · Node.js · PostgreSQL · MQTT · Socket.io · Claude AI</span>
         </footer>
       </div>
 
@@ -663,7 +663,7 @@ export default function App() {
             <span className="chat-head-icon">🤖</span>
             <div className="chat-head-info">
               <strong>Assistente IA</strong>
-              <span>Groq · llama-3.3-70b — controle por voz</span>
+              <span>Claude · Anthropic — controle por voz</span>
             </div>
           </div>
           <div className="chat-msgs">
