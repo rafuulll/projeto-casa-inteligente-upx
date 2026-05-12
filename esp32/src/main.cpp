@@ -46,6 +46,11 @@ float temperatura    = 23.0;
 float umidade        = 60.0;
 bool  movimentoAtivo = false;
 
+// ── Modo offline ──────────────────────────────────────────────────────────────
+bool modoOffline = false;
+unsigned long tUltimaReconexao = 0;
+const unsigned long INTERVALO_RECONEXAO = 30000; // tenta reconectar a cada 30s
+
 // ── Porta: fecha automaticamente após 3s sem bloquear o loop ─────────────────
 bool          portaTimer    = false;
 unsigned long tPortaAberta  = 0;
@@ -72,11 +77,16 @@ void melodia() {
   for (int i = 0; i < 3; i++) { bip(); delay(80); }
 }
 
+// Publica no MQTT somente se conectado
+void mqttPublish(const char* topic, const char* payload) {
+  if (!modoOffline && client.connected()) client.publish(topic, payload);
+}
+
 void ligarLuz(bool estado) {
   if (luzLigada == estado) return;
   luzLigada = estado;
   digitalWrite(RELAY_LUZ, estado ? HIGH : LOW);
-  client.publish("casa/luz/status", estado ? "ligada" : "desligada");
+  mqttPublish("casa/luz/status", estado ? "ligada" : "desligada");
   if (estado) contadorLuz++;
   Serial.printf("[LUZ] %s\n", estado ? "LIGADA" : "DESLIGADA");
 }
@@ -85,7 +95,7 @@ void ligarVentilador(bool estado) {
   if (ventLigado == estado) return;
   ventLigado = estado;
   digitalWrite(RELAY_VENT, estado ? HIGH : LOW);
-  client.publish("casa/ventilador/status", estado ? "ligado" : "desligado");
+  mqttPublish("casa/ventilador/status", estado ? "ligado" : "desligado");
   Serial.printf("[VENT] %s\n", estado ? "LIGADO" : "DESLIGADO");
 }
 
@@ -96,7 +106,7 @@ void abrirPorta() {
   bip();
   portaTimer   = true;
   tPortaAberta = millis();
-  client.publish("casa/porta/status", "aberta");
+  mqttPublish("casa/porta/status", "aberta");
   Serial.println("[PORTA] ABERTA");
 }
 
@@ -105,7 +115,7 @@ void fecharPorta() {
   portaTimer  = false;
   servoPorta.write(0);
   bip();
-  client.publish("casa/porta/status", "fechada");
+  mqttPublish("casa/porta/status", "fechada");
   Serial.println("[PORTA] FECHADA");
 }
 
@@ -115,7 +125,7 @@ void ativarAlarme() {
     digitalWrite(BUZZER_PIN, HIGH); digitalWrite(LED_PIN, HIGH); delay(200);
     digitalWrite(BUZZER_PIN, LOW);  digitalWrite(LED_PIN, LOW);  delay(200);
   }
-  client.publish("casa/alarme", "intruso_detectado");
+  mqttPublish("casa/alarme", "intruso_detectado");
 }
 
 // ── IA Local: aprendizado de padrões ─────────────────────────────────────────
@@ -134,7 +144,7 @@ void iaAprenderPadroes() {
 
     if (freq >= 0.8f && !iaAtiva) {
       iaAtiva = true;
-      client.publish("casa/ia/status", "ativa");
+      mqttPublish("casa/ia/status", "ativa");
       Serial.println("[IA] PADRAO DETECTADO - IA ATIVA!");
       melodia();
     }
@@ -175,7 +185,9 @@ void atualizarDisplay() {
   display.print(buf);
 
   display.setCursor(0, 52);
-  if (iaAtiva) {
+  if (modoOffline) {
+    display.print("OFFLINE");
+  } else if (iaAtiva) {
     display.print("IA: ATIVA");
   } else {
     sprintf(buf, "IA: aprendendo %d/5", ciclosObservados);
@@ -224,30 +236,37 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
 }
 
-// ── Reconexão MQTT ────────────────────────────────────────────────────────────
+// ── Reconexão MQTT (não-bloqueante) ──────────────────────────────────────────
 
-void reconnect() {
-  while (!client.connected()) {
-    Serial.print("Conectando MQTT...");
-    String cid = "esp32-smarthome-" + String(random(0xffff), HEX);
-    if (client.connect(cid.c_str())) {
-      Serial.println(" OK");
-      client.subscribe("casa/luz/comando");
-      client.subscribe("casa/ventilador/comando");
-      client.subscribe("casa/porta/comando");
-      client.subscribe("casa/alarme/comando");
-      client.subscribe("casa/reset");
-      // Publica estado inicial
-      client.publish("casa/luz/status",        luzLigada   ? "ligada"  : "desligada");
-      client.publish("casa/ventilador/status",  ventLigado  ? "ligado"  : "desligado");
-      client.publish("casa/porta/status",       portaAberta ? "aberta"  : "fechada");
-      client.publish("casa/alarme/status", modoSeguranca   ? "ativado" : "desativado");
-      client.publish("casa/ia/status",          iaAtiva     ? "ativa"   : "inativa");
-    } else {
-      Serial.printf(" falhou rc=%d, tentando em 3s\n", client.state());
-      delay(3000);
-    }
+void tentarReconectarMQTT() {
+  if (WiFi.status() != WL_CONNECTED || client.connected()) return;
+  Serial.print("Conectando MQTT...");
+  String cid = "esp32-smarthome-" + String(random(0xffff), HEX);
+  if (client.connect(cid.c_str())) {
+    modoOffline = false;
+    Serial.println(" OK");
+    client.subscribe("casa/luz/comando");
+    client.subscribe("casa/ventilador/comando");
+    client.subscribe("casa/porta/comando");
+    client.subscribe("casa/alarme/comando");
+    client.subscribe("casa/reset");
+    client.publish("casa/luz/status",       luzLigada     ? "ligada"    : "desligada");
+    client.publish("casa/ventilador/status", ventLigado   ? "ligado"    : "desligado");
+    client.publish("casa/porta/status",      portaAberta  ? "aberta"    : "fechada");
+    client.publish("casa/alarme/status",     modoSeguranca? "ativado"   : "desativado");
+    client.publish("casa/ia/status",         iaAtiva      ? "ativa"     : "inativa");
+  } else {
+    Serial.printf(" falhou rc=%d\n", client.state());
   }
+}
+
+// ── Tenta reconectar WiFi (não-bloqueante) ────────────────────────────────────
+
+void tentarReconectarWiFi() {
+  if (WiFi.status() == WL_CONNECTED) return;
+  Serial.println("[WiFi] Reconectando...");
+  WiFi.disconnect();
+  WiFi.begin(ssid, password);
 }
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
@@ -290,12 +309,30 @@ void setup() {
   Serial.println("[OK] Servo iniciado (porta fechada)");
 
   WiFi.begin(ssid, password);
-  Serial.print("Conectando WiFi");
-  while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
-  Serial.println("\n[OK] WiFi conectado: " + WiFi.localIP().toString());
+  Serial.print("Conectando WiFi (timeout 10s)");
+  unsigned long tWifi = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - tWifi < 10000) {
+    delay(500); Serial.print(".");
+  }
 
-  client.setServer(mqtt_server, mqtt_port);
-  client.setCallback(callback);
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\n[OK] WiFi conectado: " + WiFi.localIP().toString());
+    client.setServer(mqtt_server, mqtt_port);
+    client.setCallback(callback);
+    tentarReconectarMQTT();
+  } else {
+    modoOffline = true;
+    Serial.println("\n[OFFLINE] WiFi nao disponivel — modo local ativo");
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(10, 20);
+    display.println("MODO OFFLINE");
+    display.setCursor(4, 36);
+    display.println("Sensores + IA local");
+    display.display();
+    delay(1500);
+  }
 
   melodia();
   Serial.println("[OK] Sistema pronto!\n");
@@ -304,8 +341,15 @@ void setup() {
 // ── Loop ──────────────────────────────────────────────────────────────────────
 
 void loop() {
-  if (!client.connected()) reconnect();
-  client.loop();
+  // Tenta reconectar WiFi + MQTT periodicamente sem bloquear o loop
+  unsigned long agora = millis();
+  if (agora - tUltimaReconexao >= INTERVALO_RECONEXAO) {
+    tUltimaReconexao = agora;
+    tentarReconectarWiFi();
+    tentarReconectarMQTT();
+  }
+
+  if (!modoOffline && client.connected()) client.loop();
 
   unsigned long agora = millis();
 
@@ -325,16 +369,14 @@ void loop() {
     if (!isnan(h)) umidade     = h;
 
     char buf[16];
-    dtostrf(temperatura, 5, 1, buf);
-    client.publish("casa/temperatura", buf);
-    dtostrf(umidade, 5, 1, buf);
-    client.publish("casa/umidade", buf);
+    dtostrf(temperatura, 5, 1, buf); mqttPublish("casa/temperatura", buf);
+    dtostrf(umidade,     5, 1, buf); mqttPublish("casa/umidade",     buf);
 
     // ── PIR ──
     bool pirAgora = (digitalRead(PIR_PIN) == HIGH);
     if (pirAgora != movimentoAtivo) {
       movimentoAtivo = pirAgora;
-      client.publish("casa/movimento", movimentoAtivo ? "true" : "false");
+      mqttPublish("casa/movimento", movimentoAtivo ? "true" : "false");
       if (movimentoAtivo) {
         digitalWrite(LED_PIN, HIGH);
         if (modoSeguranca) ativarAlarme();
@@ -360,7 +402,7 @@ void loop() {
       ligarVentilador(false);
     }
     if (temperatura > 35.0f) {
-      client.publish("casa/alarme", "temperatura_critica");
+      mqttPublish("casa/alarme", "temperatura_critica");
       Serial.println("[ALERTA] Temperatura critica!");
     }
 
