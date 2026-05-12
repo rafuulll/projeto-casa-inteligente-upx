@@ -11,7 +11,7 @@ Sistema de automação residencial completo com ESP32, sensores físicos, IA loc
 | | |
 |---|---|
 | **IA Embarcada** | Aprende os hábitos do usuário diretamente no ESP32, sem precisar de servidor ou internet |
-| **Múltiplos Sensores** | DHT22 (temperatura/umidade), PIR (movimento), HC-SR04 (distância), Servo (porta) e Display OLED |
+| **Mú  ltiplos Sensores** | DHT22 (temperatura/umidade), PIR (movimento), HC-SR04 (distância), Servo (porta) e Display OLED |
 | **Funciona Offline** | WiFi indisponível? O ESP32 continua operando — sensores, automações, IA local e display funcionam normalmente |
 | **Simplicidade** | Um único dispositivo faz tudo: lê sensores, toma decisões, aciona atuadores e exibe status |
 | **Display Local** | Feedback visual imediato no OLED 128×64px: temperatura, umidade, estados e status da IA |
@@ -498,6 +498,53 @@ docker exec -it db psql -U user -d casa_inteligente
 | humidity | Float | Umidade em % |
 | movement | Boolean | Movimento detectado |
 | createdAt | DateTime | Timestamp (salvo a cada 30s) |
+
+---
+
+## Orçamento
+
+### Hardware
+
+| Componente | Qtd | Preço unit. | Subtotal |
+|---|---|---|---|
+| ESP32 DevKit V1 | 1 | R$ 35,00 | R$ 35,00 |
+| Sensor DHT22 (temperatura e umidade) | 1 | R$ 25,00 | R$ 25,00 |
+| Sensor PIR HC-SR501 (movimento) | 1 | R$ 8,00 | R$ 8,00 |
+| Sensor HC-SR04 (distância/porta) | 1 | R$ 10,00 | R$ 10,00 |
+| Display OLED 0,96" SSD1306 | 1 | R$ 25,00 | R$ 25,00 |
+| Módulo Relé 2 canais | 1 | R$ 15,00 | R$ 15,00 |
+| Servo Motor SG90 | 1 | R$ 12,00 | R$ 12,00 |
+| Buzzer 5V ativo | 1 | R$ 3,00 | R$ 3,00 |
+| LED RGB (cátodo comum) | 1 | R$ 5,00 | R$ 5,00 |
+| Fonte chaveada 5V 3A | 1 | R$ 20,00 | R$ 20,00 |
+| Protoboard 830 furos | 1 | R$ 12,00 | R$ 12,00 |
+| Kit jumpers macho-macho/macho-fêmea | 1 | R$ 15,00 | R$ 15,00 |
+| Kit resistores (220Ω, 1kΩ, 10kΩ) | 1 | R$ 10,00 | R$ 10,00 |
+| Cabo USB-A para Micro-USB | 1 | R$ 8,00 | R$ 8,00 |
+| Case acrílico para protoboard *(opcional)* | 1 | R$ 15,00 | R$ 15,00 |
+| **Total hardware** | | | **R$ 218,00** |
+
+### Software e serviços
+
+| Serviço | Plano | Custo |
+|---|---|---|
+| HiveMQ (broker MQTT cloud) | Free Tier | R$ 0,00 |
+| Groq API (IA — llama-3.3-70b) | Free (30 req/min) | R$ 0,00 |
+| PostgreSQL (via Docker local) | Open Source | R$ 0,00 |
+| Docker Desktop | Community | R$ 0,00 |
+| Wokwi Simulator | Free (VS Code) | R$ 0,00 |
+| PlatformIO IDE | Free | R$ 0,00 |
+| **Total software** | | **R$ 0,00/mês** |
+
+### Resumo
+
+| | Valor |
+|---|---|
+| Hardware (físico) | R$ 218,00 |
+| Software e serviços | R$ 0,00 |
+| **Custo total do projeto** | **R$ 218,00** |
+
+> Comparativo: sistemas comerciais equivalentes (Google Home, Alexa) custam a partir de R$ 500,00 em hardware, mais mensalidades de serviço. Este projeto entrega funcionalidade superior com custo ~58% menor e sem mensalidade.
 
 ---
 
