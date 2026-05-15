@@ -16,6 +16,15 @@ function Dashboard() {
   useEffect(() => {
     api.get<Telemetria>("/api/telemetria/atual").then((r) => setTele((t) => ({ ...t, ...r.data }))).catch(() => {});
     api.get<Device[]>("/api/devices").then((r) => setDevices(r.data ?? [])).catch(() => {});
+    api.get("/api/logs").then((r) => {
+      const logs = (r.data ?? []).map((l: any) => ({
+        id:       String(l.id),
+        timestamp: l.createdAt,
+        descricao: `${l.device?.name ?? l.deviceId} ${l.action === 'ON' ? 'ligado' : 'desligado'}`,
+        tipo:      l.action === 'ON' ? 'on' : 'off',
+      }));
+      setHistorico(logs);
+    }).catch(() => {});
     const s = getSocket();
     const onTele = (data: Telemetria) => setTele((t) => ({ ...t, ...data }));
     const onDev = (data: Device[]) => setDevices(data);
@@ -25,11 +34,21 @@ function Dashboard() {
     s.on("devices", onDev);
     s.on("device_update", onDevUpdate);
     s.on("acao", onAcao);
+    s.on("new_log", (l: any) => {
+      const acao: AcaoHistorico = {
+        id:        String(l.id),
+        timestamp: l.createdAt,
+        descricao: l.descricao ?? `${l.device?.name ?? l.deviceId} ${l.action === 'ON' ? 'ligado' : 'desligado'}`,
+        tipo:      l.action === 'ON' ? 'on' : 'off',
+      };
+      setHistorico((h) => [acao, ...h].slice(0, 20));
+    });
     return () => {
       s.off("telemetria", onTele);
       s.off("devices", onDev);
       s.off("device_update", onDevUpdate);
       s.off("acao", onAcao);
+      s.off("new_log");
     };
   }, []);
 
