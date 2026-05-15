@@ -270,7 +270,7 @@ export default function App() {
             <div className="logo-icon">🏠</div>
             <div>
               <h1>Casa Inteligente</h1>
-              <p>ESP32 · MQTT · PostgreSQL · Socket.io · Grok AI — nível 03</p>
+              <p>ESP32 · MQTT · PostgreSQL · Socket.io · Claude AI — nível 03</p>
             </div>
           </div>
           <div className="header-right">
@@ -359,7 +359,7 @@ export default function App() {
 
         <footer>
           <span>Casa Inteligente UPX · 2025</span>
-          <span>React + Node.js + PostgreSQL + MQTT + Socket.io + Grok AI</span>
+          <span>React + Node.js + PostgreSQL + MQTT + Socket.io + Claude AI</span>
         </footer>
       </div>
 
@@ -370,7 +370,7 @@ export default function App() {
             <span className="chat-head-icon">🤖</span>
             <div className="chat-head-info">
               <strong>Assistente IA</strong>
-              <span>Grok · xAI — controle por voz</span>
+              <span>Claude · Anthropic — controle por voz</span>
             </div>
           </div>
           <div className="chat-msgs">
