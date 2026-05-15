@@ -88,8 +88,8 @@ function Dashboard() {
             icon={Footprints}
             label="Movimento"
             value={tele.movimento ? (tele.alarme === "armado" ? "Alarme!" : "Detectado") : "Inativo"}
-            accent={tele.movimento && tele.alarme === "armado" ? "destructive" : tele.movimento ? "warning" : "primary"}
-            status={tele.movimento && tele.alarme === "armado" ? "alert" : "idle"}
+            accent={tele.movimento && tele.alarme === "armado" ? "warning" : tele.movimento ? "destructive" : "primary"}
+            status={tele.movimento ? "alert" : "idle"}
             trend="PIR · entrada"
           />
           <SensorCard icon={Brain} label="IA Local" value={tele.ia_status === "online" ? "Online" : tele.ia_status === "aprendendo" ? "Treinando" : "Offline"} accent="primary" status={tele.ia_status === "online" ? "ok" : tele.ia_status === "aprendendo" ? "warn" : "alert"} trend="ESP32 edge model" />
