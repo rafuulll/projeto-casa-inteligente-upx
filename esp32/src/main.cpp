@@ -77,10 +77,11 @@ const int           CICLOS_TREINO = 5;
 const float         FREQ_ATIVACAO = 0.80f;
 
 // ── Timers ────────────────────────────────────────────────────────────────────
-unsigned long tUltimoDHT  = 0;
-unsigned long tUltimoMQTT = 0;
-unsigned long tMovimento  = 0;
+unsigned long tUltimoDHT    = 0;
+unsigned long tUltimoMQTT  = 0;
+unsigned long tMovimento   = 0;
 unsigned long tPortaAberta = 0;
+unsigned long tUltimoAlarmeTemp = 0;
 
 const unsigned long DT_DHT   = 2000;
 const unsigned long DT_MQTT  = 5000;
@@ -247,7 +248,8 @@ void lerDHT() {
     setDispositivo(PIN_SALA_FAN, false, &salaFan, "casa/sala-ventilador/status");
   }
 
-  if (temperatura > 35.0) {
+  if (temperatura > 35.0 && (millis() - tUltimoAlarmeTemp > 60000)) {
+    tUltimoAlarmeTemp = millis();
     pub("casa/alarme", "calor_extremo");
     beep(2000, 500);
   }
