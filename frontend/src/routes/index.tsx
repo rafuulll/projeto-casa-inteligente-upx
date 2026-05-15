@@ -19,11 +19,18 @@ function Dashboard() {
     const s = getSocket();
     const onTele = (data: Telemetria) => setTele((t) => ({ ...t, ...data }));
     const onDev = (data: Device[]) => setDevices(data);
+    const onDevUpdate = (updated: Device) => setDevices((ds) => ds.map((d) => d.id === updated.id ? updated : d));
     const onAcao = (a: AcaoHistorico) => setHistorico((h) => [a, ...h].slice(0, 20));
     s.on("telemetria", onTele);
     s.on("devices", onDev);
+    s.on("device_update", onDevUpdate);
     s.on("acao", onAcao);
-    return () => { s.off("telemetria", onTele); s.off("devices", onDev); s.off("acao", onAcao); };
+    return () => {
+      s.off("telemetria", onTele);
+      s.off("devices", onDev);
+      s.off("device_update", onDevUpdate);
+      s.off("acao", onAcao);
+    };
   }, []);
 
   const toggle = async (id: string) => {
