@@ -90,6 +90,10 @@ const tools = [
 async function applyDeviceState(deviceId, state) {
   const device = await _prisma.device.findUnique({ where: { id: deviceId } })
   if (!device) return null
+
+  // Sempre publica MQTT para garantir sincronismo com o ESP32/Wokwi
+  _mqttClient.publish(`casa/${deviceId}`, state ? 'ON' : 'OFF')
+
   if (device.state === state) return device
 
   const updated = await _prisma.device.update({ where: { id: deviceId }, data: { state } })
@@ -98,7 +102,6 @@ async function applyDeviceState(deviceId, state) {
     include: { device: true }
   })
 
-  _mqttClient.publish(`casa/${deviceId}`, state ? 'ON' : 'OFF')
   _io.emit('device_update', { id: updated.id, nome: updated.name, comodo: updated.room, tipo: updated.type, estado: updated.state })
   _io.emit('new_log', { ...log, descricao: `${updated.name} ${state ? 'ligado' : 'desligado'} (IA)`, tipo: state ? 'on' : 'off' })
 
