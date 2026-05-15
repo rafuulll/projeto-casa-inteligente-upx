@@ -15,12 +15,11 @@ function Historico() {
 
   useEffect(() => {
     api.get(`/api/telemetria/historico`, { params: { periodo } })
-      .then((r) => {
-        const arr = (r.data?.pontos ?? r.data ?? []) as HistoricoPonto[];
-        setData(arr);
-        const evs = (r.data?.movimentos ?? []) as MovimentoEvento[];
-        setEventos(evs);
-      }).catch(() => {});
+      .then((r) => setData((r.data ?? []) as HistoricoPonto[]))
+      .catch(() => {});
+    api.get(`/api/movimento`)
+      .then((r) => setEventos((r.data ?? []) as MovimentoEvento[]))
+      .catch(() => {});
   }, [periodo]);
 
   return (

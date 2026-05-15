@@ -237,12 +237,40 @@ app.post('/api/porta/:acao', (req, res) => {
 
 app.post('/api/alarme/:acao', (req, res) => {
   const { acao } = req.params
-  if (!['ativar', 'desativar'].includes(acao)) return res.status(400).json({ error: 'Ação inválida' })
-  mqttClient.publish('casa/alarme/comando', acao === 'ativar' ? 'ATIVAR' : 'DESATIVAR')
+  const ligar    = ['ativar', 'armar'].includes(acao)
+  const desligar = ['desativar', 'desarmar'].includes(acao)
+  if (!ligar && !desligar) return res.status(400).json({ error: 'Ação inválida' })
+  mqttClient.publish('casa/alarme/comando', ligar ? 'ATIVAR' : 'DESATIVAR')
   res.json({ ok: true, acao })
 })
 
-// ── Rota: IA ──────────────────────────────────────────────────────────────────
+// ── Rotas: IA / automações ────────────────────────────────────────────────────
+app.get('/api/ai/stats', (req, res) => {
+  res.json({
+    status:              telemetria.iaStatus === 'ativa' ? 'online' : 'aprendendo',
+    precisao:            telemetria.iaStatus === 'ativa' ? 0.85 : null,
+    eventos_aprendidos:  telemetria.iaStatus === 'ativa' ? 5 : null,
+    modelos:             1,
+    uptime:              telemetria.updatedAt
+  })
+})
+
+app.get('/api/ai/regras', (req, res) => {
+  res.json([
+    { id: '1', nome: 'Ventilador automático',  descricao: 'Liga o ventilador da sala',          ativa: true,  trigger: 'temp > 28°C'       },
+    { id: '2', nome: 'Desliga ventilador',      descricao: 'Desliga o ventilador da sala',       ativa: true,  trigger: 'temp < 26°C'       },
+    { id: '3', nome: 'Alerta calor extremo',    descricao: 'Dispara buzzer e publica alarme',    ativa: true,  trigger: 'temp > 35°C'       },
+    { id: '4', nome: 'Detector de intrusos',    descricao: 'Alarme ao detectar movimento',       ativa: true,  trigger: 'PIR + modo seguro' },
+    { id: '5', nome: 'Fecha porta automática',  descricao: 'Fecha a porta após 3s aberta',       ativa: true,  trigger: 'porta aberta 3s'   },
+  ])
+})
+
+app.post('/api/ia/reset', (req, res) => {
+  mqttClient.publish('casa/reset', 'RESET_IA')
+  res.json({ ok: true })
+})
+
+// ── Rota: IA chat ─────────────────────────────────────────────────────────────
 app.post('/api/ai/chat', async (req, res) => {
   const { message } = req.body
   if (!message) return res.status(400).json({ error: 'Campo "message" obrigatório.' })

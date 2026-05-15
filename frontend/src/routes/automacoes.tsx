@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Brain, Cpu, GitBranch, Sparkles, Zap } from "lucide-react";
+import { Brain, Cpu, GitBranch, RotateCcw, Sparkles, Zap } from "lucide-react";
 import { api, type Regra } from "@/lib/api";
 import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/automacoes")({ component: Automacoes });
 
@@ -40,10 +41,14 @@ function Automacoes() {
               <div className="flex items-center gap-2">
                 <h2 className="font-mono text-lg font-semibold">Edge AI · ESP32</h2>
                 <span className="flex items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-success">
-                  <span className="h-1.5 w-1.5 rounded-full bg-current pulse-dot" /> {stats.status ?? "online"}
+                  <span className="h-1.5 w-1.5 rounded-full bg-current pulse-dot" /> {stats.status ?? "aprendendo"}
                 </span>
               </div>
               <p className="text-sm text-muted-foreground">Modelo embarcado aprendendo padrões em tempo real.</p>
+              <Button variant="ghost" size="sm" className="mt-2 h-7 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => api.post("/api/ia/reset").catch(() => {})}>
+                <RotateCcw className="h-3 w-3" /> Reiniciar aprendizado
+              </Button>
             </div>
           </div>
           <div className="grid grid-cols-3 gap-6">
