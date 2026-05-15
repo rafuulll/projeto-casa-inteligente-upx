@@ -137,7 +137,18 @@ setInterval(async () => {
 }, 30000)
 
 // ── IA Service ────────────────────────────────────────────────────────────────
-aiService.init(prisma, mqttClient, io)
+if (process.env.ANTHROPIC_API_KEY) {
+  try {
+    aiService.init(prisma, mqttClient, io)
+    telemetria.iaStatus = 'ativa'
+  } catch (e) {
+    console.error('Falha ao iniciar IA Service:', e.message)
+    telemetria.iaStatus = 'inativa'
+  }
+} else {
+  console.log('IA Service desativado (chave não encontrada).')
+  telemetria.iaStatus = 'inativa'
+}
 
 // ── Seed ──────────────────────────────────────────────────────────────────────
 async function seed() {
