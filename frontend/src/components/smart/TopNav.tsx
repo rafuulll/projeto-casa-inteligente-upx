@@ -16,7 +16,7 @@ export function TopNav() {
             <Activity className="h-5 w-5" />
           </div>
           <div>
-            <div className="text-sm font-semibold leading-tight">SmartHaus</div>
+            <div className="text-sm font-semibold leading-tight">Smart House</div>
             <div className="text-[10px] uppercase tracking-widest text-muted-foreground">IoT Control</div>
           </div>
         </Link>
