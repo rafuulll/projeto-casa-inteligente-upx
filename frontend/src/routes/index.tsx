@@ -84,7 +84,14 @@ function Dashboard() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <SensorCard icon={Thermometer} label="Temperatura" value={tele.temperatura?.toFixed(1) ?? "—"} unit="°C" accent="warning" trend="ambiente · sala" />
           <SensorCard icon={Droplets} label="Umidade" value={tele.umidade?.toFixed(0) ?? "—"} unit="%" accent="accent" trend="DHT22 · ESP32" />
-          <SensorCard icon={Footprints} label="Movimento" value={tele.movimento ? "Detectado" : "Inativo"} accent={tele.movimento ? "destructive" : "primary"} status={tele.movimento ? "alert" : "idle"} trend="PIR · entrada" />
+          <SensorCard
+            icon={Footprints}
+            label="Movimento"
+            value={tele.movimento ? (tele.alarme === "armado" ? "Alarme!" : "Detectado") : "Inativo"}
+            accent={tele.movimento && tele.alarme === "armado" ? "destructive" : tele.movimento ? "warning" : "primary"}
+            status={tele.movimento && tele.alarme === "armado" ? "alert" : "idle"}
+            trend="PIR · entrada"
+          />
           <SensorCard icon={Brain} label="IA Local" value={tele.ia_status === "online" ? "Online" : tele.ia_status === "aprendendo" ? "Treinando" : "Offline"} accent="primary" status={tele.ia_status === "online" ? "ok" : tele.ia_status === "aprendendo" ? "warn" : "alert"} trend="ESP32 edge model" />
         </div>
       </section>
