@@ -77,11 +77,12 @@ const int           CICLOS_TREINO = 5;
 const float         FREQ_ATIVACAO = 0.80f;
 
 // ── Timers ────────────────────────────────────────────────────────────────────
-unsigned long tUltimoDHT    = 0;
-unsigned long tUltimoMQTT  = 0;
-unsigned long tMovimento   = 0;
-unsigned long tPortaAberta = 0;
+unsigned long tUltimoDHT       = 0;
+unsigned long tUltimoMQTT      = 0;
+unsigned long tMovimento       = 0;
+unsigned long tPortaAberta     = 0;
 unsigned long tUltimoAlarmeTemp = 0;
+unsigned long tUltimoAlarmeMov  = 0;
 
 const unsigned long DT_DHT   = 2000;
 const unsigned long DT_MQTT  = 5000;
@@ -262,7 +263,8 @@ void verificarPIR() {
     setLedRGB(true, true, false); // amarelo: movimento
     pub("casa/movimento", "true");
     Serial.println("Movimento detectado!");
-    if (modoSeguranca) {
+    if (modoSeguranca && (millis() - tUltimoAlarmeMov > 30000)) {
+      tUltimoAlarmeMov = millis();
       setAlarme(true);
       pub("casa/alarme", "intruso_detectado");
     }
