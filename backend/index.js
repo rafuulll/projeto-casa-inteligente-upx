@@ -68,7 +68,20 @@ mqttClient.on('message', (topic, message) => {
 
   // Confirmações de dispositivos: casa/sala-luz/status, etc.
   if (parts.length === 3 && parts[2] === 'status' && parts[1] !== 'ia' && parts[1] !== 'porta') {
-    console.log(`ESP32 confirmou [${parts[1]}]: ${msg}`)
+    const deviceId = parts[1]
+    const newState = msg === 'ON'
+    console.log(`ESP32 confirmou [${deviceId}]: ${msg}`)
+
+    prisma.device.findUnique({ where: { id: deviceId } }).then(async (device) => {
+      if (!device || device.state === newState) return
+      const updated = await prisma.device.update({ where: { id: deviceId }, data: { state: newState } })
+      const log = await prisma.log.create({
+        data: { deviceId, action: newState ? 'ON' : 'OFF' },
+        include: { device: true }
+      })
+      io.emit('device_update', toDeviceDTO(updated))
+      io.emit('new_log', { ...log, descricao: `${updated.name} ${newState ? 'ligado' : 'desligado'} (automático)`, tipo: newState ? 'on' : 'off' })
+    }).catch(() => {})
     return
   }
 
