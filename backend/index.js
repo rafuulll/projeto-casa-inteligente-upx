@@ -156,6 +156,20 @@ async function seed() {
     ]
   })
   console.log('Dispositivos criados!')
+
+  const ruleCount = await prisma.rule.count()
+  if (ruleCount === 0) {
+    await prisma.rule.createMany({
+      data: [
+        { nome: 'Ventilador automático', descricao: 'Liga o ventilador da sala',       trigger: 'temp > 28°C'       },
+        { nome: 'Desliga ventilador',    descricao: 'Desliga o ventilador da sala',    trigger: 'temp < 26°C'       },
+        { nome: 'Alerta calor extremo',  descricao: 'Dispara buzzer e publica alarme', trigger: 'temp > 35°C'       },
+        { nome: 'Detector de intrusos',  descricao: 'Alarme ao detectar movimento',    trigger: 'PIR + modo seguro' },
+        { nome: 'Fecha porta automática',descricao: 'Fecha a porta após 3s aberta',    trigger: 'porta aberta 3s'   },
+      ]
+    })
+    console.log('Regras criadas!')
+  }
 }
 
 // ── Rotas: dispositivos ───────────────────────────────────────────────────────
@@ -255,14 +269,37 @@ app.get('/api/ai/stats', (req, res) => {
   })
 })
 
-app.get('/api/ai/regras', (req, res) => {
-  res.json([
-    { id: '1', nome: 'Ventilador automático',  descricao: 'Liga o ventilador da sala',          ativa: true,  trigger: 'temp > 28°C'       },
-    { id: '2', nome: 'Desliga ventilador',      descricao: 'Desliga o ventilador da sala',       ativa: true,  trigger: 'temp < 26°C'       },
-    { id: '3', nome: 'Alerta calor extremo',    descricao: 'Dispara buzzer e publica alarme',    ativa: true,  trigger: 'temp > 35°C'       },
-    { id: '4', nome: 'Detector de intrusos',    descricao: 'Alarme ao detectar movimento',       ativa: true,  trigger: 'PIR + modo seguro' },
-    { id: '5', nome: 'Fecha porta automática',  descricao: 'Fecha a porta após 3s aberta',       ativa: true,  trigger: 'porta aberta 3s'   },
-  ])
+app.get('/api/ai/regras', async (req, res) => {
+  const regras = await prisma.rule.findMany({ orderBy: { createdAt: 'asc' } })
+  res.json(regras)
+})
+
+app.post('/api/ai/regras', async (req, res) => {
+  const { nome, descricao, trigger } = req.body
+  if (!nome || !descricao || !trigger) return res.status(400).json({ error: 'nome, descricao e trigger são obrigatórios' })
+  const regra = await prisma.rule.create({ data: { nome, descricao, trigger } })
+  res.json(regra)
+})
+
+app.put('/api/ai/regras/:id', async (req, res) => {
+  const { id } = req.params
+  const { nome, descricao, trigger, ativa } = req.body
+  const regra = await prisma.rule.update({ where: { id }, data: { nome, descricao, trigger, ativa } })
+  res.json(regra)
+})
+
+app.post('/api/ai/regras/:id/toggle', async (req, res) => {
+  const { id } = req.params
+  const regra = await prisma.rule.findUnique({ where: { id } })
+  if (!regra) return res.status(404).json({ error: 'Regra não encontrada' })
+  const updated = await prisma.rule.update({ where: { id }, data: { ativa: !regra.ativa } })
+  res.json(updated)
+})
+
+app.delete('/api/ai/regras/:id', async (req, res) => {
+  const { id } = req.params
+  await prisma.rule.delete({ where: { id } })
+  res.json({ ok: true })
 })
 
 app.post('/api/ia/reset', (req, res) => {
