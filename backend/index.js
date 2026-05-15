@@ -14,6 +14,25 @@ const io     = new Server(server, { cors: { origin: '*' } })
 app.use(cors())
 app.use(express.json())
 
+// ── Helpers de mapeamento ─────────────────────────────────────────────────────
+const toDeviceDTO = (d) => ({
+  id:     d.id,
+  nome:   d.name,
+  comodo: d.room,
+  tipo:   d.type,
+  estado: d.state
+})
+
+const toTelemetriaDTO = (t) => ({
+  temperatura: t.temperature,
+  umidade:     t.humidity,
+  movimento:   t.movement,
+  ia_status:   t.iaStatus === 'ativa' ? 'online' : 'aprendendo',
+  porta:       t.doorStatus,
+  alarme:      'desarmado',
+  timestamp:   t.updatedAt
+})
+
 // ── Estado de telemetria em memória ──────────────────────────────────────────
 const telemetria = {
   temperature:  null,
@@ -57,32 +76,32 @@ mqttClient.on('message', (topic, message) => {
     case 'casa/temperatura':
       telemetria.temperature = parseFloat(msg)
       telemetria.updatedAt   = new Date()
-      io.emit('telemetry_update', telemetria)
+      io.emit('telemetria', toTelemetriaDTO(telemetria))
       break
 
     case 'casa/umidade':
       telemetria.humidity  = parseFloat(msg)
       telemetria.updatedAt = new Date()
-      io.emit('telemetry_update', telemetria)
+      io.emit('telemetria', toTelemetriaDTO(telemetria))
       break
 
     case 'casa/movimento':
       telemetria.movement = msg === 'true'
       if (msg === 'true') telemetria.lastMovement = new Date()
       telemetria.updatedAt = new Date()
-      io.emit('telemetry_update', telemetria)
+      io.emit('telemetria', toTelemetriaDTO(telemetria))
       break
 
     case 'casa/ia/status':
       telemetria.iaStatus  = msg
       telemetria.updatedAt = new Date()
-      io.emit('telemetry_update', telemetria)
+      io.emit('telemetria', toTelemetriaDTO(telemetria))
       break
 
     case 'casa/porta/status':
       telemetria.doorStatus = msg
       telemetria.updatedAt  = new Date()
-      io.emit('telemetry_update', telemetria)
+      io.emit('telemetria', toTelemetriaDTO(telemetria))
       break
 
     case 'casa/alarme':
@@ -129,7 +148,7 @@ async function seed() {
 // ── Rotas: dispositivos ───────────────────────────────────────────────────────
 app.get('/api/devices', async (req, res) => {
   const devices = await prisma.device.findMany({ orderBy: { room: 'asc' } })
-  res.json(devices)
+  res.json(devices.map(toDeviceDTO))
 })
 
 app.get('/api/logs', async (req, res) => {
@@ -154,15 +173,15 @@ app.post('/api/devices/:id/toggle', async (req, res) => {
   })
 
   mqttClient.publish(`casa/${id}`, newState ? 'ON' : 'OFF')
-  io.emit('device_update', updated)
-  io.emit('new_log', log)
+  io.emit('device_update', toDeviceDTO(updated))
+  io.emit('new_log', { ...log, descricao: `${updated.name} ${newState ? 'ligado' : 'desligado'}`, tipo: newState ? 'on' : 'off' })
 
-  res.json(updated)
+  res.json(toDeviceDTO(updated))
 })
 
 // ── Rotas: telemetria ─────────────────────────────────────────────────────────
 app.get('/api/telemetria/atual', (req, res) => {
-  res.json(telemetria)
+  res.json(toTelemetriaDTO(telemetria))
 })
 
 app.get('/api/telemetria/historico', async (req, res) => {
@@ -175,7 +194,11 @@ app.get('/api/telemetria/historico', async (req, res) => {
     orderBy: { createdAt: 'asc' },
     take:    500
   })
-  res.json(dados)
+  res.json(dados.map(d => ({
+    temperatura: d.temperature,
+    umidade:     d.humidity,
+    timestamp:   d.createdAt
+  })))
 })
 
 app.get('/api/movimento', async (req, res) => {
@@ -184,7 +207,11 @@ app.get('/api/movimento', async (req, res) => {
     orderBy: { createdAt: 'desc' },
     take:    20
   })
-  res.json(eventos)
+  res.json(eventos.map(e => ({
+    id:        e.id,
+    timestamp: e.createdAt,
+    local:     'Entrada principal'
+  })))
 })
 
 // ── Rotas: porta e alarme ─────────────────────────────────────────────────────
