@@ -110,8 +110,10 @@ function Dashboard() {
             <div>
               <div className="text-xs uppercase tracking-wider text-muted-foreground">Alarme</div>
               <div className="mt-1 flex items-center gap-2 font-mono text-xl">
-                {tele.alarme === "armado" ? <ShieldAlert className="h-5 w-5 text-destructive" /> : <ShieldCheck className="h-5 w-5 text-success" />}
-                {tele.alarme === "armado" ? "Armado" : "Desarmado"}
+                {tele.alarme === "armado" ? <ShieldCheck className="h-5 w-5 text-success" /> : <ShieldAlert className="h-5 w-5 text-destructive" />}
+                <span className={tele.alarme === "armado" ? "text-success" : "text-destructive"}>
+                  {tele.alarme === "armado" ? "Armado" : "Desarmado"}
+                </span>
               </div>
             </div>
             <div className="flex gap-2">
