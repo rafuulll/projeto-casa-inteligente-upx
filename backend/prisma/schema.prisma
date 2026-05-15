@@ -24,3 +24,11 @@ model Log {
   action    String
   createdAt DateTime @default(now())
 }
+
+model Telemetry {
+  id          Int      @id @default(autoincrement())
+  temperature Float?
+  humidity    Float?
+  movement    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
