@@ -191,7 +191,7 @@ async function executeTool(name, args) {
 }
 
 // ── Handler principal do chat ─────────────────────────────────────────────────
-async function handleChat(userMessage) {
+async function handleChat(userMessage, history = []) {
   const devices    = await _prisma.device.findMany({ orderBy: { room: 'asc' } })
   const deviceList = devices.map(d =>
     `- ID: "${d.id}" | Nome: "${d.name}" | Cômodo: ${d.room} | Estado: ${d.state ? 'LIGADO' : 'DESLIGADO'}`
@@ -215,7 +215,13 @@ REGRAS:
 4. Para agendamentos: use "schedule_action" com "delay_seconds" (relativo) ou "time" (HH:MM).
 5. Após executar, confirme em uma frase curta. Nunca mostre JSON ou código na resposta final.`
 
-  const messages = [{ role: 'user', content: userMessage }]
+  const messages = [
+    ...history.filter(m => m.role && m.content).map(m => ({
+      role:    m.role === 'user' ? 'user' : 'assistant',
+      content: String(m.content)
+    })),
+    { role: 'user', content: userMessage }
+  ]
 
   try {
     const response = await getClient().messages.create({

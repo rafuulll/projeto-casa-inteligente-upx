@@ -309,11 +309,11 @@ app.post('/api/ia/reset', (req, res) => {
 
 // ── Rota: IA chat ─────────────────────────────────────────────────────────────
 app.post('/api/ai/chat', async (req, res) => {
-  const { message } = req.body
+  const { message, history = [] } = req.body
   if (!message) return res.status(400).json({ error: 'Campo "message" obrigatório.' })
 
   try {
-    const reply = await aiService.handleChat(message)
+    const reply = await aiService.handleChat(message, history)
     res.json({ reply })
   } catch (err) {
     console.error('Erro na IA:', err.message)

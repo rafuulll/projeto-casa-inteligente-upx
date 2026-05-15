@@ -25,7 +25,8 @@ export function ChatPanel() {
     setInput("");
     setLoading(true);
     try {
-      const { data } = await api.post("/api/ai/chat", { message: userMsg.content });
+      const history = msgs.slice(-8).map((m) => ({ role: m.role, content: m.content }));
+      const { data } = await api.post("/api/ai/chat", { message: userMsg.content, history });
       const reply = data?.reply ?? data?.message ?? data?.content ?? "(sem resposta)";
       setMsgs((m) => [...m, { role: "assistant", content: String(reply) }]);
     } catch {
