@@ -99,8 +99,8 @@ async function applyDeviceState(deviceId, state) {
   })
 
   _mqttClient.publish(`casa/${deviceId}`, state ? 'ON' : 'OFF')
-  _io.emit('device_update', updated)
-  _io.emit('new_log', log)
+  _io.emit('device_update', { id: updated.id, nome: updated.name, comodo: updated.room, tipo: updated.type, estado: updated.state })
+  _io.emit('new_log', { ...log, descricao: `${updated.name} ${state ? 'ligado' : 'desligado'} (IA)`, tipo: state ? 'on' : 'off' })
 
   return updated
 }
