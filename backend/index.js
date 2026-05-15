@@ -141,31 +141,31 @@ aiService.init(prisma, mqttClient, io)
 
 // ── Seed ──────────────────────────────────────────────────────────────────────
 async function seed() {
-  const count = await prisma.device.count()
-  if (count > 0) return
-
-  console.log('Criando dispositivos iniciais...')
-  await prisma.device.createMany({
-    data: [
-      { id: 'sala-luz',          name: 'Luz da Sala',     room: 'Sala',    type: 'light' },
-      { id: 'sala-ventilador',   name: 'Ventilador',      room: 'Sala',    type: 'fan'   },
-      { id: 'quarto-luz',        name: 'Luz do Quarto',   room: 'Quarto',  type: 'light' },
-      { id: 'quarto-ar',         name: 'Ar-condicionado', room: 'Quarto',  type: 'ac'    },
-      { id: 'cozinha-luz',       name: 'Luz da Cozinha',  room: 'Cozinha', type: 'light' },
-      { id: 'cozinha-cafeteira', name: 'Cafeteira',       room: 'Cozinha', type: 'plug'  },
-    ]
-  })
-  console.log('Dispositivos criados!')
+  const deviceCount = await prisma.device.count()
+  if (deviceCount === 0) {
+    console.log('Criando dispositivos iniciais...')
+    await prisma.device.createMany({
+      data: [
+        { id: 'sala-luz',          name: 'Luz da Sala',     room: 'Sala',    type: 'light' },
+        { id: 'sala-ventilador',   name: 'Ventilador',      room: 'Sala',    type: 'fan'   },
+        { id: 'quarto-luz',        name: 'Luz do Quarto',   room: 'Quarto',  type: 'light' },
+        { id: 'quarto-ar',         name: 'Ar-condicionado', room: 'Quarto',  type: 'ac'    },
+        { id: 'cozinha-luz',       name: 'Luz da Cozinha',  room: 'Cozinha', type: 'light' },
+        { id: 'cozinha-cafeteira', name: 'Cafeteira',       room: 'Cozinha', type: 'plug'  },
+      ]
+    })
+    console.log('Dispositivos criados!')
+  }
 
   const ruleCount = await prisma.rule.count()
   if (ruleCount === 0) {
     await prisma.rule.createMany({
       data: [
-        { nome: 'Ventilador automático', descricao: 'Liga o ventilador da sala',       trigger: 'temp > 28°C'       },
-        { nome: 'Desliga ventilador',    descricao: 'Desliga o ventilador da sala',    trigger: 'temp < 26°C'       },
-        { nome: 'Alerta calor extremo',  descricao: 'Dispara buzzer e publica alarme', trigger: 'temp > 35°C'       },
-        { nome: 'Detector de intrusos',  descricao: 'Alarme ao detectar movimento',    trigger: 'PIR + modo seguro' },
-        { nome: 'Fecha porta automática',descricao: 'Fecha a porta após 3s aberta',    trigger: 'porta aberta 3s'   },
+        { nome: 'Ventilador automático',  descricao: 'Liga o ventilador da sala',       trigger: 'temp > 28°C'       },
+        { nome: 'Desliga ventilador',     descricao: 'Desliga o ventilador da sala',    trigger: 'temp < 26°C'       },
+        { nome: 'Alerta calor extremo',   descricao: 'Dispara buzzer e publica alarme', trigger: 'temp > 35°C'       },
+        { nome: 'Detector de intrusos',   descricao: 'Alarme ao detectar movimento',    trigger: 'PIR + modo seguro' },
+        { nome: 'Fecha porta automática', descricao: 'Fecha a porta após 3s aberta',    trigger: 'porta aberta 3s'   },
       ]
     })
     console.log('Regras criadas!')
