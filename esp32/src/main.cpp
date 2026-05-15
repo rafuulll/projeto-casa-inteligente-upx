@@ -263,10 +263,11 @@ void verificarPIR() {
     setLedRGB(true, true, false); // amarelo: movimento
     pub("casa/movimento", "true");
     Serial.println("Movimento detectado!");
-    if (modoSeguranca && (millis() - tUltimoAlarmeMov > 30000)) {
-      tUltimoAlarmeMov = millis();
+    if (modoSeguranca) {
       setAlarme(true);
       pub("casa/alarme", "intruso_detectado");
+      modoSeguranca = false; // desarma automaticamente após detectar movimento
+      pub("casa/alarme/status", "desarmado");
     }
   }
 }
