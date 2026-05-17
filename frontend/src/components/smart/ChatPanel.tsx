@@ -10,7 +10,7 @@ export function ChatPanel() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [msgs, setMsgs] = useState<ChatMsg[]>([
-    { role: "assistant", content: "Olá! Sou seu assistente Claude. Pergunte sobre sua casa." },
+    { role: "assistant", content: "Olá! Sou o Cláudio, seu assistente de casa inteligente. Pergunte sobre sua casa." },
   ]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -60,7 +60,7 @@ export function ChatPanel() {
                 <Bot className="h-5 w-5" />
               </div>
               <div className="flex-1">
-                <div className="text-sm font-semibold">Claude AI</div>
+                <div className="text-sm font-semibold">Cláudio</div>
                 <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-success">
                   <span className="h-1.5 w-1.5 rounded-full bg-current pulse-dot" /> conectado
                 </div>

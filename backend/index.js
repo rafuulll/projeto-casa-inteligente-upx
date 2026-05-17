@@ -29,9 +29,87 @@ const toTelemetriaDTO = (t) => ({
   movimento:   t.movement,
   ia_status:   t.iaStatus === 'ativa' ? 'online' : 'aprendendo',
   porta:       t.doorStatus,
-  alarme:      'desarmado',
+  alarme:      t.alarmeStatus || 'desarmado',
   timestamp:   t.updatedAt
 })
+
+// ── Motor de regras ───────────────────────────────────────────────────────────
+const ruleCooldowns = new Map() // ruleId → timestamp do último disparo
+const RULE_COOLDOWN_MS = 60000  // 1 minuto entre disparos da mesma regra
+
+function parseRuleTrigger(trigger) {
+  const t = trigger.toLowerCase().trim()
+  const tempMatch = t.match(/temp(?:eratura)?\s*([><]=?)\s*(\d+(?:\.\d+)?)/)
+  if (tempMatch) return { type: 'temp', op: tempMatch[1], value: parseFloat(tempMatch[2]) }
+  const humMatch = t.match(/umidade?\s*([><]=?)\s*(\d+(?:\.\d+)?)/)
+  if (humMatch) return { type: 'humidity', op: humMatch[1], value: parseFloat(humMatch[2]) }
+  if (t.includes('movimento') || t.includes('pir')) return { type: 'movement' }
+  return null
+}
+
+function evalCondition(condition, tel) {
+  const check = (actual, op, threshold) => {
+    if (actual == null) return false
+    if (op === '>')  return actual > threshold
+    if (op === '>=') return actual >= threshold
+    if (op === '<')  return actual < threshold
+    if (op === '<=') return actual <= threshold
+    return false
+  }
+  if (condition.type === 'temp')     return check(tel.temperature, condition.op, condition.value)
+  if (condition.type === 'humidity') return check(tel.humidity,    condition.op, condition.value)
+  if (condition.type === 'movement') return tel.movement === true
+  return false
+}
+
+function inferDeviceAction(nome, descricao) {
+  const text = (nome + ' ' + descricao).toLowerCase()
+  let deviceId = null
+  if      (text.match(/ar.condicionado|quarto.ar/))           deviceId = 'quarto-ar'
+  else if (text.match(/ventilador|sala.ventilador/))           deviceId = 'sala-ventilador'
+  else if (text.match(/luz.*(sala)|sala.*(luz)/))              deviceId = 'sala-luz'
+  else if (text.match(/luz.*(quarto)|quarto.*(luz)/))          deviceId = 'quarto-luz'
+  else if (text.match(/luz.*(cozinha)|cozinha.*(luz)/))        deviceId = 'cozinha-luz'
+  else if (text.includes('cafeteira'))                         deviceId = 'cozinha-cafeteira'
+
+  let state = null
+  if      (text.match(/deslig|desativ|\boff\b/)) state = false
+  else if (text.match(/\bliga|\bativ|\bon\b/))   state = true
+  return { deviceId, state }
+}
+
+async function processRules() {
+  if (telemetria.temperature === null) return
+  try {
+    const rules = await prisma.rule.findMany({ where: { ativa: true } })
+    for (const rule of rules) {
+      const condition = parseRuleTrigger(rule.trigger)
+      if (!condition) continue
+      if (!evalCondition(condition, telemetria)) continue
+
+      const last = ruleCooldowns.get(rule.id) || 0
+      if (Date.now() - last < RULE_COOLDOWN_MS) continue
+
+      const { deviceId, state } = inferDeviceAction(rule.nome, rule.descricao)
+      if (!deviceId || state === null) {
+        console.log(`[Regra] "${rule.nome}": condição atendida mas dispositivo/ação não identificados`)
+        continue
+      }
+
+      const device = await prisma.device.findUnique({ where: { id: deviceId } })
+      if (!device || device.state === state) { ruleCooldowns.set(rule.id, Date.now()); continue }
+
+      console.log(`[Regra] "${rule.nome}" disparada → ${deviceId} ${state ? 'ON' : 'OFF'}`)
+      ruleCooldowns.set(rule.id, Date.now())
+
+      const updated = await prisma.device.update({ where: { id: deviceId }, data: { state } })
+      const log = await prisma.log.create({ data: { deviceId, action: state ? 'ON' : 'OFF' }, include: { device: true } })
+      mqttClient.publish(`casa/${deviceId}`, state ? 'ON' : 'OFF')
+      io.emit('device_update', toDeviceDTO(updated))
+      io.emit('new_log', { ...log, descricao: `${updated.name} ${state ? 'ligado' : 'desligado'} (regra: ${rule.nome})`, tipo: state ? 'on' : 'off' })
+    }
+  } catch (e) { console.error('[Regra] Erro:', e.message) }
+}
 
 // ── Estado de telemetria em memória ──────────────────────────────────────────
 const telemetria = {
@@ -40,6 +118,7 @@ const telemetria = {
   movement:     false,
   iaStatus:     'inativa',
   doorStatus:   'fechada',
+  alarmeStatus: 'desarmado',
   lastMovement: null,
   updatedAt:    null
 }
@@ -90,17 +169,28 @@ mqttClient.on('message', (topic, message) => {
       telemetria.temperature = parseFloat(msg)
       telemetria.updatedAt   = new Date()
       io.emit('telemetria', toTelemetriaDTO(telemetria))
+      processRules()
       break
 
     case 'casa/umidade':
       telemetria.humidity  = parseFloat(msg)
       telemetria.updatedAt = new Date()
       io.emit('telemetria', toTelemetriaDTO(telemetria))
+      processRules()
       break
 
     case 'casa/movimento':
       telemetria.movement = msg === 'true'
-      if (msg === 'true') telemetria.lastMovement = new Date()
+      if (msg === 'true') {
+        telemetria.lastMovement = new Date()
+        prisma.telemetry.create({
+          data: {
+            temperature: telemetria.temperature,
+            humidity:    telemetria.humidity,
+            movement:    true
+          }
+        }).catch(e => console.error('Erro ao salvar evento de movimento:', e))
+      }
       telemetria.updatedAt = new Date()
       io.emit('telemetria', toTelemetriaDTO(telemetria))
       break
@@ -124,7 +214,7 @@ mqttClient.on('message', (topic, message) => {
   }
 })
 
-// Salva telemetria no banco a cada 30 segundos
+// Salva telemetria e avalia regras a cada 30 segundos
 setInterval(async () => {
   if (telemetria.temperature === null) return
   await prisma.telemetry.create({
@@ -134,12 +224,16 @@ setInterval(async () => {
       movement:    telemetria.movement
     }
   }).catch(e => console.error('Erro ao salvar telemetria:', e))
+  processRules()
 }, 30000)
 
 // ── IA Service ────────────────────────────────────────────────────────────────
 if (process.env.ANTHROPIC_API_KEY) {
   try {
-    aiService.init(prisma, mqttClient, io)
+    aiService.init(prisma, mqttClient, io, (alarmeStatus) => {
+      telemetria.alarmeStatus = alarmeStatus
+      io.emit('telemetria', toTelemetriaDTO(telemetria))
+    })
     telemetria.iaStatus = 'ativa'
   } catch (e) {
     console.error('Falha ao iniciar IA Service:', e.message)
@@ -224,7 +318,7 @@ app.get('/api/telemetria/atual', (req, res) => {
 
 app.get('/api/telemetria/historico', async (req, res) => {
   const { periodo = '24h' } = req.query
-  const horas = periodo === '7d' ? 168 : periodo === '1h' ? 1 : 24
+  const horas = { '1h': 1, '6h': 6, '24h': 24, '7d': 168 }[periodo] ?? 24
   const desde = new Date(Date.now() - horas * 60 * 60 * 1000)
 
   const dados = await prisma.telemetry.findMany({
@@ -266,6 +360,8 @@ app.post('/api/alarme/:acao', (req, res) => {
   const desligar = ['desativar', 'desarmar'].includes(acao)
   if (!ligar && !desligar) return res.status(400).json({ error: 'Ação inválida' })
   mqttClient.publish('casa/alarme/comando', ligar ? 'ATIVAR' : 'DESATIVAR')
+  telemetria.alarmeStatus = ligar ? 'armado' : 'desarmado'
+  io.emit('telemetria', toTelemetriaDTO(telemetria))
   res.json({ ok: true, acao })
 })
 

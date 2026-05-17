@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Brain, Cpu, GitBranch, Pencil, Plus, RotateCcw, Sparkles, Trash2, Zap } from "lucide-react";
+import { GitBranch, Pencil, Plus, Trash2 } from "lucide-react";
 import { api, type Regra } from "@/lib/api";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -10,19 +10,15 @@ import { Label } from "@/components/ui/label";
 
 export const Route = createFileRoute("/automacoes")({ component: Automacoes });
 
-interface IAStats { precisao?: number; eventos_aprendidos?: number; modelos?: number; uptime?: string; status?: string; }
-
 const EMPTY: Omit<Regra, "id"> = { nome: "", descricao: "", trigger: "", ativa: true };
 
 function Automacoes() {
-  const [stats, setStats]   = useState<IAStats>({});
   const [regras, setRegras] = useState<Regra[]>([]);
   const [modal, setModal]   = useState<{ open: boolean; editing: Regra | null }>({ open: false, editing: null });
   const [form, setForm]     = useState<Omit<Regra, "id">>(EMPTY);
   const [saving, setSaving] = useState(false);
 
   const load = () => {
-    api.get("/api/ai/stats").then((r) => setStats(r.data ?? {})).catch(() => {});
     api.get<Regra[]>("/api/ai/regras").then((r) => setRegras(r.data ?? [])).catch(() => {});
   };
 
@@ -68,40 +64,9 @@ function Automacoes() {
     <div className="space-y-8">
       <div>
         <h1 className="font-mono text-2xl font-semibold">Automações</h1>
-        <p className="text-sm text-muted-foreground">IA local rodando no ESP32.</p>
+        <p className="text-sm text-muted-foreground">Regras automáticas baseadas em temperatura, umidade e movimento.</p>
       </div>
 
-      {/* IA Status card */}
-      <div className="relative overflow-hidden rounded-xl border border-border bg-card p-6">
-        <div className="absolute inset-0 grid-bg opacity-30" />
-        <div className="relative flex flex-wrap items-center justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 text-primary glow-primary">
-              <Brain className="h-7 w-7" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="font-mono text-lg font-semibold">Edge AI · ESP32</h2>
-                <span className="flex items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-success">
-                  <span className="h-1.5 w-1.5 rounded-full bg-current pulse-dot" /> {stats.status ?? "aprendendo"}
-                </span>
-              </div>
-              <p className="text-sm text-muted-foreground">Modelo embarcado aprendendo padrões em tempo real.</p>
-              <Button variant="ghost" size="sm" className="mt-2 h-7 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"
-                onClick={() => api.post("/api/ia/reset").catch(() => {})}>
-                <RotateCcw className="h-3 w-3" /> Reiniciar aprendizado
-              </Button>
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-6">
-            <Stat icon={Sparkles} label="Precisão"  value={stats.precisao != null ? `${(stats.precisao * 100).toFixed(0)}%` : "—"} />
-            <Stat icon={Zap}      label="Eventos"   value={stats.eventos_aprendidos ?? "—"} />
-            <Stat icon={Cpu}      label="Modelos"   value={stats.modelos ?? "—"} />
-          </div>
-        </div>
-      </div>
-
-      {/* Regras */}
       <div className="rounded-xl border border-border bg-card p-5">
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -111,6 +76,10 @@ function Automacoes() {
           <Button size="sm" className="gap-1.5" onClick={openCreate}>
             <Plus className="h-4 w-4" /> Nova regra
           </Button>
+        </div>
+
+        <div className="mb-4 rounded-lg border border-border bg-secondary/30 px-4 py-3 text-xs text-muted-foreground">
+          <span className="font-semibold text-foreground">Como criar uma regra:</span> preencha a condição no campo <span className="font-mono">trigger</span> (ex: <span className="font-mono">temp &gt; 30</span>, <span className="font-mono">umidade &gt; 80</span>, <span className="font-mono">movimento</span>) e descreva o dispositivo e ação na descrição (ex: <span className="font-mono">Liga o ar condicionado</span>).
         </div>
 
         <div className="divide-y divide-border">
@@ -144,7 +113,6 @@ function Automacoes() {
         </div>
       </div>
 
-      {/* Modal editar / criar */}
       <Dialog open={modal.open} onOpenChange={(o) => setModal({ open: o, editing: null })}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -153,17 +121,17 @@ function Automacoes() {
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
               <Label>Nome</Label>
-              <Input placeholder="Ex: Ligar luz às 18h"
+              <Input placeholder="Ex: Ligar ar quando calor"
                 value={form.nome} onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))} />
             </div>
             <div className="space-y-1.5">
-              <Label>Descrição</Label>
-              <Input placeholder="Ex: Liga a luz da sala automaticamente"
+              <Label>Descrição / Ação</Label>
+              <Input placeholder="Ex: Liga o ar condicionado"
                 value={form.descricao} onChange={(e) => setForm((f) => ({ ...f, descricao: e.target.value }))} />
             </div>
             <div className="space-y-1.5">
               <Label>Condição (trigger)</Label>
-              <Input placeholder="Ex: hora = 18:00 ou temp > 30°C"
+              <Input placeholder="Ex: temp > 30  |  umidade > 80  |  movimento"
                 value={form.trigger} onChange={(e) => setForm((f) => ({ ...f, trigger: e.target.value }))} />
             </div>
           </div>
@@ -175,17 +143,6 @@ function Automacoes() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-function Stat({ icon: Icon, label, value }: { icon: typeof Brain; label: string; value: React.ReactNode }) {
-  return (
-    <div>
-      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-muted-foreground">
-        <Icon className="h-3 w-3" /> {label}
-      </div>
-      <div className="mt-1 font-mono text-2xl font-semibold text-primary">{value}</div>
     </div>
   );
 }
