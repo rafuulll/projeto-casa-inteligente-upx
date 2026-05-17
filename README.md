@@ -1,188 +1,189 @@
-# Casa Inteligente — IoT + IA
-
-Sistema de controle residencial com ESP32, MQTT, React e Inteligência Artificial (Claude).
-
+# 🏠 Casa Inteligente — IoT + IA
+ 
+Sistema de controle residencial com ESP32, MQTT, React e Inteligência Artificial.
+ 
 ---
-
-## Sobre o projeto
-
-Permite controlar dispositivos elétricos de uma residência (luzes, ventilador, ar-condicionado, cafeteira e porta) através de um dashboard web em tempo real. A comunicação entre o servidor e o ESP32 é feita via MQTT. O assistente **Cláudio** (powered by Claude) entende comandos em linguagem natural e executa ações nos dispositivos. Regras automáticas disparam com base em temperatura, umidade ou movimento.
-
----
-
-## Stack
-
+ 
+## 📋 Sobre o projeto
+ 
+Este projeto permite controlar dispositivos elétricos de uma residência (luzes, tomadas, ar-condicionado etc.) através de um dashboard web moderno. A comunicação entre o servidor e o microcontrolador ESP32 é feita via protocolo MQTT, garantindo baixa latência e alta confiabilidade.
+ 
+### Stack utilizada
+ 
 | Camada | Tecnologia |
 |---|---|
-| Microcontrolador | ESP32 + PlatformIO + Arduino |
+| Microcontrolador | ESP32 + PlatformIO |
 | Protocolo IoT | MQTT (HiveMQ público) |
-| Backend | Node.js + Express + Prisma + Socket.IO |
-| Banco de dados | SQLite |
-| Frontend | React + TanStack Router + Tailwind CSS |
-| IA | Anthropic Claude (claude-haiku-4-5) |
+| Backend | Node.js + Express |
+| Frontend | React + Vite |
 | Simulador | Wokwi for VS Code |
 | Infraestrutura | Docker + Docker Compose |
-
+ 
 ---
-
-## Funcionalidades
-
-- Dashboard em tempo real com temperatura, umidade e detecção de movimento
-- Controle de 6 dispositivos por cômodo (Sala, Quarto, Cozinha)
-- Controle de porta (abrir/fechar via servo motor)
-- Alarme com arme/desarme — LED vermelho só acende ao detectar invasão
-- Assistente **Cláudio**: controla tudo por linguagem natural via chat
-- Regras automáticas: `temp > 28°C` liga ventilador, `temp > 30°C` liga ar-condicionado
-- Histórico de telemetria com gráfico (1h / 6h / 24h / 7d)
-- Registro de eventos de movimento com timestamp
-- LEDs RGB de status: verde = ok, azul = reconectando, vermelho = alarme disparado
-
----
-
-## Estrutura do projeto
-
+ 
+## 📁 Estrutura do projeto
+ 
 ```
-projeto-casa-inteligente-upx/
+projeto-casa-inteligente/
 ├── backend/
-│   ├── index.js          # servidor, MQTT, motor de regras, WebSocket
-│   ├── aiService.js      # integração Claude (chat + ferramentas)
-│   ├── prisma/
-│   │   └── schema.prisma
-│   └── .env.example
+│   ├── index.js
+│   ├── package.json
+│   └── Dockerfile
 ├── frontend/
-│   └── src/
-│       ├── routes/
-│       │   ├── index.tsx       # Dashboard
-│       │   ├── historico.tsx   # Gráficos e eventos
-│       │   └── automacoes.tsx  # Regras automáticas
-│       └── components/smart/
-│           ├── ChatPanel.tsx   # Chat com Cláudio
-│           ├── DeviceCard.tsx
-│           └── SensorCard.tsx
+│   ├── src/
+│   │   └── App.jsx
+│   ├── package.json
+│   └── Dockerfile
 ├── esp32/
-│   ├── src/main.cpp      # firmware completo
-│   ├── diagram.json      # circuito Wokwi
+│   ├── src/
+│   │   └── main.cpp
+│   ├── diagram.json
 │   ├── wokwi.toml
 │   └── platformio.ini
-└── docker-compose.yml
+├── docker-compose.yml
+├── mosquitto.conf
+└── README.md
 ```
-
+ 
 ---
-
-## Como rodar
-
+ 
+## 🚀 Como rodar na sua máquina
+ 
 ### Pré-requisitos
-
-- [Docker Desktop](https://www.docker.com/products/docker-desktop)
-- [VS Code](https://code.visualstudio.com/) com as extensões:
-  - **PlatformIO IDE**
-  - **Wokwi Simulator** (requer licença gratuita em wokwi.com)
-
-### 1 — Clone o repositório
-
+ 
+- [Docker Desktop](https://www.docker.com/products/docker-desktop) instalado e rodando
+- [VS Code](https://code.visualstudio.com/) instalado
+- Extensões do VS Code necessárias (instalar na primeira vez):
+  - **PlatformIO IDE** — para compilar o código do ESP32
+  - **Wokwi Simulator** — para simular o ESP32 com o LED
+### Passo 1 — Clone o repositório
+ 
 ```bash
-git clone https://github.com/rafuulll/projeto-casa-inteligente-upx.git
-cd projeto-casa-inteligente-upx
+git clone https://github.com/rafuulll/projeto-casa-inteligente.git
+cd projeto-casa-inteligente
 ```
+ 
+### Passo 2 — Configure as Variáveis de Ambiente
 
-### 2 — Configure o ambiente
+Para o Chat com Inteligência Artificial funcionar, o backend precisa da sua chave de API.
+Copie o arquivo de exemplo na pasta `backend`:
 
 ```bash
 cd backend
 cp .env.example .env
 ```
-
-Abra `backend/.env` e preencha:
-
-```env
-DATABASE_URL="file:./dev.db"
-MQTT_BROKER="mqtt://broker.hivemq.com:1883"
-ANTHROPIC_API_KEY="sua_chave_aqui"
-PORT=3001
-```
-
-> A chave da Anthropic é necessária para o Cláudio funcionar. Sem ela, o chat fica desativado mas o restante funciona normalmente.
-
-### 3 — Suba o backend e frontend
-
+> Abra o arquivo `backend/.env` que acabou de ser criado e preencha a variável `GROQ_API_KEY` com sua chave (obtida no console da plataforma escolhida). Volte para a raiz (`cd ..`) antes de continuar.
+ 
+### Passo 3 — Suba o Docker
+ 
 ```bash
-cd ..
 docker-compose up --build
 ```
-
-Acesse o dashboard em **http://localhost:5173**
-
-### 4 — Compile e simule o ESP32
-
-Abra a pasta `esp32/` no VS Code:
-
+ 
+> Na primeira vez, o Docker vai baixar as imagens e instalar as dependências. Pode demorar alguns minutos.
+ 
+Após subir, acesse o dashboard em **http://localhost:5173**
+ 
+### Passo 4 — Abra a pasta do ESP32 no VS Code
+ 
+> ⚠️ **Importante:** o PlatformIO só reconhece o projeto se você abrir **especificamente a pasta `esp32/`** no VS Code. Se abrir a pasta raiz do projeto, o PlatformIO não vai encontrar o `platformio.ini` e o comando Build não vai aparecer.
+ 
 ```
-Arquivo → Abrir Pasta → seleciona esp32/
+Arquivo → Abrir Pasta → seleciona a pasta esp32/
 ```
-
-Compile o firmware:
+ 
+### Passo 5 — Aguarde o PlatformIO inicializar
+ 
+Na primeira vez em uma máquina nova, o PlatformIO precisa baixar as ferramentas do ESP32. Aguarde alguns minutos até aparecer os ícones na barra inferior do VS Code:
+ 
+```
+✔ Build   → Upload   🔌 Serial Monitor
+```
+ 
+### Passo 6 — Compile o firmware do ESP32
+ 
 ```
 Ctrl+Shift+P → PlatformIO: Build
 ```
-
-Inicie o simulador:
+ 
+Ou clique no ícone ✔ na barra inferior do VS Code. Aguarde aparecer `SUCCESS` no terminal.
+ 
+> Se o comando `PlatformIO: Build` não aparecer no `Ctrl+Shift+P`, clique no ícone do PlatformIO (👾 alienígena) na barra lateral → Project Tasks → esp32dev → General → Build.
+ 
+### Passo 7 — Inicie o simulador Wokwi
+ 
 ```
-Ctrl+Shift+P → Wokwi: Start Simulator
+F1 → Wokwi: Start Simulator
 ```
-
-### Ordem de inicialização
-
-```
-1. backend/.env configurado com ANTHROPIC_API_KEY
-2. docker-compose up --build   → backend + frontend + banco
-3. PlatformIO: Build           → gera firmware.bin
-4. Wokwi: Start Simulator      → ESP32 conecta ao MQTT
-5. http://localhost:5173        → dashboard funcionando
-```
-
+ 
+Ou abra o arquivo `diagram.json` e clique em **Play**.
+ 
+### Passo 8 — Teste o sistema
+ 
+Com tudo rodando, acesse **http://localhost:5173**, teste os botões e converse com a IA para controlar os dispositivos.
+ 
 ---
-
-## Fluxo de comunicação
-
+ 
+## 🔁 Resumo da ordem de inicialização
+ 
 ```
-Usuário (dashboard ou chat Cláudio)
-    ↓ HTTP / WebSocket
-Node.js backend
-    ↓ publish MQTT  ex: casa/quarto-ar → ON
-HiveMQ (broker público)
-    ↓ subscribe
+1. Configurar backend/.env         → Adicionar chave da API de IA
+2. docker-compose up --build       → Sobe backend + frontend + banco + MQTT
+3. Abrir pasta esp32/ no VS Code   → Reconhece o platformio.ini
+4. PlatformIO: Build               → Compila o firmware (aguarda SUCCESS)
+5. Wokwi: Start Simulator          → Simula o ESP32
+6. Acessar localhost:5173          → Dashboard web com IA funcionando
+```
+ 
+---
+ 
+## 🔌 Fluxo de comunicação
+ 
+```
+React (frontend)
+    ↓ POST /api/led/toggle
+Node.js (backend)
+    ↓ publish "casa/led" → ON/OFF
+HiveMQ (broker MQTT público)
+    ↓ subscribe "casa/led"
 ESP32 (Wokwi)
-    ↓ aciona relé / servo / buzzer
-    ↓ publica telemetria  ex: casa/temperatura → 28.4
-Backend recebe → atualiza banco → emite via Socket.IO
-    ↓
-Dashboard atualiza em tempo real
+    ↓ digitalWrite(LED_PIN, HIGH/LOW)
+LED acende/apaga na simulação
 ```
-
+ 
 ---
-
-## Como criar uma regra automática
-
-Na página **Automações**, clique em **Nova regra** e preencha:
-
-| Campo | Exemplo |
-|---|---|
-| Nome | Ligar ar quando calor |
-| Descrição | Liga o ar condicionado |
-| Trigger | `temp > 30` |
-
-Triggers suportados: `temp > X`, `temp < X`, `umidade > X`, `umidade < X`, `movimento`
-
----
-
-## Como parar
-
+ 
+## 🛑 Como parar os serviços
+ 
 ```bash
 docker-compose down
 ```
-
+ 
+### Comandos úteis
+ 
+```bash
+# Subir em segundo plano
+docker-compose up -d --build
+ 
+# Ver logs de um serviço
+docker-compose logs -f backend
+docker-compose logs -f frontend
+docker-compose logs -f mosquitto
+ 
+# Reiniciar um serviço
+docker-compose restart backend
+```
+ 
 ---
-
-## Equipe
-
-Projeto acadêmico desenvolvido como parte da disciplina de UPx.
+ 
+## 🗺️ Roadmap
+ 
+- [x] Nível 01 — Controle de LED via web + MQTT
+- [x] Nível 02 — Múltiplos dispositivos + banco de dados + dashboard
+- [x] Nível 03 — Chat com IA + automações por linguagem natural
+- [ ] Nível 04 — Integração WhatsApp + automações por horário
+---
+ 
+## 👥 Equipe
+ 
+Projeto acadêmico desenvolvido por estudantes como parte da disciplina de UPx.
