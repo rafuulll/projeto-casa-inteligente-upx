@@ -10,13 +10,12 @@ function getClient() {
   return _client
 }
 
-let _prisma, _mqttClient, _io, _setAlarmeStatus
+let _prisma, _mqttClient, _io
 
-function init(prisma, mqttClient, io, setAlarmeStatus) {
-  _prisma           = prisma
-  _mqttClient       = mqttClient
-  _io               = io
-  _setAlarmeStatus  = setAlarmeStatus
+function init(prisma, mqttClient, io) {
+  _prisma     = prisma
+  _mqttClient = mqttClient
+  _io         = io
 }
 
 // ── Ferramentas (formato Anthropic) ──────────────────────────────────────────
@@ -75,28 +74,6 @@ const tools = [
         repeat:        { type: 'boolean', description: 'true para repetir todos os dias no horário especificado em "time"' }
       },
       required: ['action', 'state']
-    }
-  },
-  {
-    name: 'control_alarm',
-    description: 'Ativa ou desativa o alarme/modo segurança da casa.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        state: { type: 'boolean', description: 'true para ativar o alarme, false para desativar' }
-      },
-      required: ['state']
-    }
-  },
-  {
-    name: 'control_door',
-    description: 'Abre ou fecha a porta principal da casa.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        action: { type: 'string', enum: ['abrir', 'fechar'], description: '"abrir" para abrir a porta, "fechar" para fechar' }
-      },
-      required: ['action']
     }
   },
   {
@@ -205,19 +182,6 @@ async function executeTool(name, args) {
       return "Erro: informe 'time' ou 'delay_seconds'."
     }
 
-    case 'control_alarm': {
-      const cmd = args.state ? 'ATIVAR' : 'DESATIVAR'
-      _mqttClient.publish('casa/alarme/comando', cmd)
-      if (_setAlarmeStatus) _setAlarmeStatus(args.state ? 'armado' : 'desarmado')
-      return `Alarme ${args.state ? 'ativado' : 'desativado'} com sucesso.`
-    }
-
-    case 'control_door': {
-      const cmd = args.action === 'abrir' ? 'ABRIR' : 'FECHAR'
-      _mqttClient.publish('casa/porta/comando', cmd)
-      return `Porta ${args.action === 'abrir' ? 'aberta' : 'fechada'} com sucesso.`
-    }
-
     case 'get_status': {
       const devices = await _prisma.device.findMany({ orderBy: { room: 'asc' } })
       const lines   = devices.map(d => `- ${d.name} (${d.room}): ${d.state ? 'LIGADO' : 'DESLIGADO'}`)
@@ -252,9 +216,7 @@ REGRAS:
 2. Para ligar/desligar um cômodo inteiro: use "control_room".
 3. Para ligar/desligar tudo: use "control_all_devices".
 4. Para agendamentos: use "schedule_action" com "delay_seconds" (relativo) ou "time" (HH:MM).
-5. Para ativar/desativar o alarme: use "control_alarm".
-6. Para abrir/fechar a porta: use "control_door".
-7. Após executar, confirme em uma frase curta. Nunca mostre JSON ou código na resposta final.`
+5. Após executar, confirme em uma frase curta. Nunca mostre JSON ou código na resposta final.`
 
   const messages = [
     ...history.filter(m => m.role && m.content).map(m => ({

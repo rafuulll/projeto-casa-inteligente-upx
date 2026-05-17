@@ -15,8 +15,8 @@ const int   mqtt_port   = 1883;
 // ── Modo de operação ─────────────────────────────────────────────────────────
 // Wokwi (LEDs):        RELAY_ON = HIGH, RELAY_OFF = LOW
 // Hardware (relé active LOW): RELAY_ON = LOW,  RELAY_OFF = HIGH
-#define RELAY_ON  LOW
-#define RELAY_OFF HIGH
+#define RELAY_ON  HIGH
+#define RELAY_OFF LOW
 
 // ── Pinos existentes (dispositivos) ──────────────────────────────────────────
 #define PIN_SALA_LUZ        2
@@ -226,15 +226,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   else if (t == "casa/cozinha-luz")        setDispositivo(PIN_COZ_LUZ,        msg == "ON", &cozLuz,       "casa/cozinha-luz/status");
   else if (t == "casa/cozinha-cafeteira")  setDispositivo(PIN_COZ_CAFETEIRA,  msg == "ON", &cozCafeteira, "casa/cozinha-cafeteira/status");
   else if (t == "casa/porta/comando")      setPorta(msg == "ABRIR");
-  else if (t == "casa/alarme/comando") {
-    if (msg == "ATIVAR") {
-      modoSeguranca = true;
-      // LED permanece verde — alarme só dispara ao detectar movimento
-    } else {
-      modoSeguranca = false;
-      setAlarme(false);
-    }
-  }
+  else if (t == "casa/alarme/comando")     { modoSeguranca = (msg == "ATIVAR"); setAlarme(msg == "ATIVAR"); }
   else if (t == "casa/reset" && msg == "RESET_IA") {
     contadorLuzManual = 0; ciclosObservados = 0; iaAtiva = false;
     pub("casa/ia/status", "inativa");
@@ -317,7 +309,7 @@ void setLedRGB(bool r, bool g, bool b) {
   digitalWrite(PIN_LED_B, b ? HIGH : LOW);
 }
 
-void beep(int freq, int ms) { digitalWrite(PIN_BUZZER, HIGH); delay(ms); digitalWrite(PIN_BUZZER, LOW); }
+void beep(int freq, int ms) { tone(PIN_BUZZER, freq, ms); }
 
 // ── IA Local ──────────────────────────────────────────────────────────────────
 void processarIALocal() {
