@@ -29,9 +29,78 @@ const toTelemetriaDTO = (t) => ({
   movimento:   t.movement,
   ia_status:   t.iaStatus === 'ativa' ? 'online' : 'aprendendo',
   porta:       t.doorStatus,
-  alarme:      'desarmado',
+  alarme:      t.alarmeStatus || 'desarmado',
   timestamp:   t.updatedAt
 })
+
+// ── Motor de regras ───────────────────────────────────────────────────────────
+const ruleCooldowns = new Map()
+const RULE_COOLDOWN_MS = 60000
+
+function parseRuleTrigger(trigger) {
+  const t = trigger.toLowerCase().trim()
+  const tempMatch = t.match(/temp(?:eratura)?\s*([><]=?)\s*(\d+(?:\.\d+)?)/)
+  if (tempMatch) return { type: 'temp', op: tempMatch[1], value: parseFloat(tempMatch[2]) }
+  const humMatch = t.match(/umidade?\s*([><]=?)\s*(\d+(?:\.\d+)?)/)
+  if (humMatch) return { type: 'humidity', op: humMatch[1], value: parseFloat(humMatch[2]) }
+  if (t.includes('movimento') || t.includes('pir')) return { type: 'movement' }
+  return null
+}
+
+function evalCondition(condition, tel) {
+  const check = (actual, op, threshold) => {
+    if (actual == null) return false
+    if (op === '>')  return actual > threshold
+    if (op === '>=') return actual >= threshold
+    if (op === '<')  return actual < threshold
+    if (op === '<=') return actual <= threshold
+    return false
+  }
+  if (condition.type === 'temp')     return check(tel.temperature, condition.op, condition.value)
+  if (condition.type === 'humidity') return check(tel.humidity,    condition.op, condition.value)
+  if (condition.type === 'movement') return tel.movement === true
+  return false
+}
+
+function inferDeviceAction(nome, descricao) {
+  const text = (nome + ' ' + descricao).toLowerCase()
+  let deviceId = null
+  if      (text.match(/ar.condicionado|quarto.ar/))           deviceId = 'quarto-ar'
+  else if (text.match(/ventilador|sala.ventilador/))           deviceId = 'sala-ventilador'
+  else if (text.match(/luz.*(sala)|sala.*(luz)/))              deviceId = 'sala-luz'
+  else if (text.match(/luz.*(quarto)|quarto.*(luz)/))          deviceId = 'quarto-luz'
+  else if (text.match(/luz.*(cozinha)|cozinha.*(luz)/))        deviceId = 'cozinha-luz'
+  else if (text.includes('cafeteira'))                         deviceId = 'cozinha-cafeteira'
+  let state = null
+  if      (text.match(/deslig|desativ|\boff\b/)) state = false
+  else if (text.match(/\bliga|\bativ|\bon\b/))   state = true
+  return { deviceId, state }
+}
+
+async function processRules() {
+  if (telemetria.temperature === null) return
+  try {
+    const rules = await prisma.rule.findMany({ where: { ativa: true } })
+    for (const rule of rules) {
+      const condition = parseRuleTrigger(rule.trigger)
+      if (!condition) continue
+      if (!evalCondition(condition, telemetria)) continue
+      const last = ruleCooldowns.get(rule.id) || 0
+      if (Date.now() - last < RULE_COOLDOWN_MS) continue
+      const { deviceId, state } = inferDeviceAction(rule.nome, rule.descricao)
+      if (!deviceId || state === null) continue
+      const device = await prisma.device.findUnique({ where: { id: deviceId } })
+      if (!device || device.state === state) { ruleCooldowns.set(rule.id, Date.now()); continue }
+      console.log(`[Regra] "${rule.nome}" → ${deviceId} ${state ? 'ON' : 'OFF'}`)
+      ruleCooldowns.set(rule.id, Date.now())
+      const updated = await prisma.device.update({ where: { id: deviceId }, data: { state } })
+      const log = await prisma.log.create({ data: { deviceId, action: state ? 'ON' : 'OFF' }, include: { device: true } })
+      mqttClient.publish(`smarthause-upx/${deviceId}`, state ? 'ON' : 'OFF')
+      io.emit('device_update', toDeviceDTO(updated))
+      io.emit('new_log', { ...log, descricao: `${updated.name} ${state ? 'ligado' : 'desligado'} (regra: ${rule.nome})`, tipo: state ? 'on' : 'off' })
+    }
+  } catch (e) { console.error('[Regra] Erro:', e.message) }
+}
 
 // ── Estado de telemetria em memória ──────────────────────────────────────────
 const telemetria = {
@@ -40,6 +109,7 @@ const telemetria = {
   movement:     false,
   iaStatus:     'inativa',
   doorStatus:   'fechada',
+  alarmeStatus: 'desarmado',
   lastMovement: null,
   updatedAt:    null
 }
@@ -52,21 +122,21 @@ mqttClient.on('connect', () => {
   console.log(`MQTT conectado: ${mqttBroker}`)
 
   // Dispositivos (confirmações do ESP32)
-  mqttClient.subscribe('casa/+/status')
+  mqttClient.subscribe('smarthause-upx/+/status')
 
   // Telemetria
-  mqttClient.subscribe('casa/temperatura')
-  mqttClient.subscribe('casa/umidade')
-  mqttClient.subscribe('casa/movimento')
-  mqttClient.subscribe('casa/ia/status')
-  mqttClient.subscribe('casa/alarme')
+  mqttClient.subscribe('smarthause-upx/temperatura')
+  mqttClient.subscribe('smarthause-upx/umidade')
+  mqttClient.subscribe('smarthause-upx/movimento')
+  mqttClient.subscribe('smarthause-upx/ia/status')
+  mqttClient.subscribe('smarthause-upx/alarme')
 })
 
 mqttClient.on('message', (topic, message) => {
   const msg   = message.toString()
   const parts = topic.split('/')
 
-  // Confirmações de dispositivos: casa/sala-luz/status, etc.
+  // Confirmações de dispositivos: smarthause-upx/sala-luz/status, etc.
   if (parts.length === 3 && parts[2] === 'status' && parts[1] !== 'ia' && parts[1] !== 'porta') {
     const deviceId = parts[1]
     const newState = msg === 'ON'
@@ -86,38 +156,48 @@ mqttClient.on('message', (topic, message) => {
   }
 
   switch (topic) {
-    case 'casa/temperatura':
+    case 'smarthause-upx/temperatura':
       telemetria.temperature = parseFloat(msg)
       telemetria.updatedAt   = new Date()
       io.emit('telemetria', toTelemetriaDTO(telemetria))
+      broadcastSSE()
+      processRules()
       break
 
-    case 'casa/umidade':
+    case 'smarthause-upx/umidade':
       telemetria.humidity  = parseFloat(msg)
       telemetria.updatedAt = new Date()
       io.emit('telemetria', toTelemetriaDTO(telemetria))
+      broadcastSSE()
+      processRules()
       break
 
-    case 'casa/movimento':
+    case 'smarthause-upx/movimento':
       telemetria.movement = msg === 'true'
-      if (msg === 'true') telemetria.lastMovement = new Date()
+      if (msg === 'true') {
+        telemetria.lastMovement = new Date()
+        prisma.telemetry.create({
+          data: { temperature: telemetria.temperature, humidity: telemetria.humidity, movement: true }
+        }).catch(() => {})
+      }
       telemetria.updatedAt = new Date()
       io.emit('telemetria', toTelemetriaDTO(telemetria))
+      broadcastSSE()
       break
 
-    case 'casa/ia/status':
+    case 'smarthause-upx/ia/status':
       telemetria.iaStatus  = msg
       telemetria.updatedAt = new Date()
       io.emit('telemetria', toTelemetriaDTO(telemetria))
       break
 
-    case 'casa/porta/status':
+    case 'smarthause-upx/porta/status':
       telemetria.doorStatus = msg
       telemetria.updatedAt  = new Date()
       io.emit('telemetria', toTelemetriaDTO(telemetria))
       break
 
-    case 'casa/alarme':
+    case 'smarthause-upx/alarme':
       console.log(`ALARME: ${msg}`)
       io.emit('alarm_event', { event: msg, timestamp: new Date() })
       break
@@ -139,7 +219,11 @@ setInterval(async () => {
 // ── IA Service ────────────────────────────────────────────────────────────────
 if (process.env.ANTHROPIC_API_KEY) {
   try {
-    aiService.init(prisma, mqttClient, io)
+    aiService.init(prisma, mqttClient, io, (alarmeStatus) => {
+      telemetria.alarmeStatus = alarmeStatus
+      io.emit('telemetria', toTelemetriaDTO(telemetria))
+      broadcastSSE()
+    })
     telemetria.iaStatus = 'ativa'
   } catch (e) {
     console.error('Falha ao iniciar IA Service:', e.message)
@@ -210,7 +294,7 @@ app.post('/api/devices/:id/toggle', async (req, res) => {
     include: { device: true }
   })
 
-  mqttClient.publish(`casa/${id}`, newState ? 'ON' : 'OFF')
+  mqttClient.publish(`smarthause-upx/${id}`, newState ? 'ON' : 'OFF')
   io.emit('device_update', toDeviceDTO(updated))
   io.emit('new_log', { ...log, descricao: `${updated.name} ${newState ? 'ligado' : 'desligado'}`, tipo: newState ? 'on' : 'off' })
 
@@ -224,7 +308,7 @@ app.get('/api/telemetria/atual', (req, res) => {
 
 app.get('/api/telemetria/historico', async (req, res) => {
   const { periodo = '24h' } = req.query
-  const horas = periodo === '7d' ? 168 : periodo === '1h' ? 1 : 24
+  const horas = { '1h': 1, '6h': 6, '24h': 24, '7d': 168 }[periodo] ?? 24
   const desde = new Date(Date.now() - horas * 60 * 60 * 1000)
 
   const dados = await prisma.telemetry.findMany({
@@ -256,7 +340,7 @@ app.get('/api/movimento', async (req, res) => {
 app.post('/api/porta/:acao', (req, res) => {
   const { acao } = req.params
   if (!['abrir', 'fechar'].includes(acao)) return res.status(400).json({ error: 'Ação inválida' })
-  mqttClient.publish('casa/porta/comando', acao === 'abrir' ? 'ABRIR' : 'FECHAR')
+  mqttClient.publish('smarthause-upx/porta/comando', acao === 'abrir' ? 'ABRIR' : 'FECHAR')
   res.json({ ok: true, acao })
 })
 
@@ -265,7 +349,10 @@ app.post('/api/alarme/:acao', (req, res) => {
   const ligar    = ['ativar', 'armar'].includes(acao)
   const desligar = ['desativar', 'desarmar'].includes(acao)
   if (!ligar && !desligar) return res.status(400).json({ error: 'Ação inválida' })
-  mqttClient.publish('casa/alarme/comando', ligar ? 'ATIVAR' : 'DESATIVAR')
+  mqttClient.publish('smarthause-upx/alarme/comando', ligar ? 'ATIVAR' : 'DESATIVAR')
+  telemetria.alarmeStatus = ligar ? 'armado' : 'desarmado'
+  io.emit('telemetria', toTelemetriaDTO(telemetria))
+  broadcastSSE()
   res.json({ ok: true, acao })
 })
 
@@ -314,7 +401,7 @@ app.delete('/api/ai/regras/:id', async (req, res) => {
 })
 
 app.post('/api/ia/reset', (req, res) => {
-  mqttClient.publish('casa/reset', 'RESET_IA')
+  mqttClient.publish('smarthause-upx/reset', 'RESET_IA')
   res.json({ ok: true })
 })
 
@@ -331,6 +418,34 @@ app.post('/api/ai/chat', async (req, res) => {
     res.status(500).json({ error: 'Falha ao comunicar com a IA.', detail: err.message })
   }
 })
+
+// ── Server-Sent Events ───────────────────────────────────────────────────────
+const sseClients = new Set()
+
+app.get('/api/events', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.flushHeaders()
+
+  const send = () => {
+    res.write(`data: ${JSON.stringify(toTelemetriaDTO(telemetria))}\n\n`)
+  }
+
+  send()
+  const interval = setInterval(send, 1000)
+  sseClients.add({ send, interval, res })
+
+  req.on('close', () => {
+    clearInterval(interval)
+    sseClients.forEach(c => { if (c.res === res) sseClients.delete(c) })
+  })
+})
+
+function broadcastSSE() {
+  sseClients.forEach(({ send }) => { try { send() } catch {} })
+}
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3001

@@ -10,6 +10,7 @@ import {
 import appCss from "../styles.css?url";
 import { TopNav } from "@/components/smart/TopNav";
 import { ChatPanel } from "@/components/smart/ChatPanel";
+import { API_BASE } from "@/lib/api";
 
 function NotFoundComponent() {
   return (
@@ -67,6 +68,18 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  if (typeof window !== "undefined" && !(window as any).__sseStarted) {
+    (window as any).__sseStarted = true;
+    const es = new EventSource(`${API_BASE}/api/events`);
+    es.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        queryClient.setQueryData(["telemetria"], data);
+      } catch {}
+    };
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <div className="min-h-screen">

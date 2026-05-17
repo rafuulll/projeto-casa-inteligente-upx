@@ -10,7 +10,7 @@ export function ChatPanel() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [msgs, setMsgs] = useState<ChatMsg[]>([
-    { role: "assistant", content: "Olá! Sou seu assistente Claude. Pergunte sobre sua casa." },
+    { role: "assistant", content: "Olá! Sou o Cláudio, seu assistente de casa inteligente. Pergunte sobre sua casa." },
   ]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -40,10 +40,10 @@ export function ChatPanel() {
     <>
       <button
         onClick={() => setOpen((o) => !o)}
-        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground glow-primary transition-transform hover:scale-105"
-        aria-label="Abrir chat IA"
+        className="fixed bottom-6 right-6 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground glow-primary transition-transform hover:scale-105"
+        aria-label="Abrir chat Cláudio"
       >
-        {open ? <X className="h-6 w-6" /> : <Sparkles className="h-6 w-6" />}
+        {open ? <X className="h-5 w-5" /> : <Sparkles className="h-5 w-5" />}
       </button>
 
       <AnimatePresence>
@@ -53,25 +53,25 @@ export function ChatPanel() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.96 }}
             transition={{ duration: 0.18 }}
-            className="fixed bottom-24 right-6 z-50 flex h-[560px] w-[380px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl"
+            className="fixed bottom-20 right-6 z-50 flex h-[420px] w-[320px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl"
           >
-            <div className="flex items-center gap-3 border-b border-border bg-secondary/50 px-4 py-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <Bot className="h-5 w-5" />
+            <div className="flex items-center gap-2 border-b border-border bg-secondary/50 px-3 py-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Bot className="h-4 w-4" />
               </div>
               <div className="flex-1">
-                <div className="text-sm font-semibold">Claude AI</div>
-                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-success">
+                <div className="text-xs font-semibold">Cláudio</div>
+                <div className="flex items-center gap-1 text-[9px] uppercase tracking-wider text-success">
                   <span className="h-1.5 w-1.5 rounded-full bg-current pulse-dot" /> conectado
                 </div>
               </div>
             </div>
 
-            <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-4">
+            <div ref={scrollRef} className="flex-1 space-y-2 overflow-y-auto p-3">
               {msgs.map((m, i) => (
                 <div key={i} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
                   <div className={cn(
-                    "max-w-[80%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
+                    "max-w-[80%] rounded-2xl px-3 py-1.5 text-xs leading-relaxed",
                     m.role === "user"
                       ? "bg-primary text-primary-foreground rounded-br-sm"
                       : "bg-secondary text-secondary-foreground rounded-bl-sm"
@@ -82,23 +82,23 @@ export function ChatPanel() {
               ))}
               {loading && (
                 <div className="flex gap-1 px-2">
-                  <span className="h-2 w-2 animate-bounce rounded-full bg-primary" />
-                  <span className="h-2 w-2 animate-bounce rounded-full bg-primary" style={{ animationDelay: "0.1s" }} />
-                  <span className="h-2 w-2 animate-bounce rounded-full bg-primary" style={{ animationDelay: "0.2s" }} />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary" style={{ animationDelay: "0.1s" }} />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary" style={{ animationDelay: "0.2s" }} />
                 </div>
               )}
             </div>
 
-            <div className="flex gap-2 border-t border-border bg-background/50 p-3">
+            <div className="flex gap-2 border-t border-border bg-background/50 p-2">
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && send()}
                 placeholder="Pergunte algo..."
-                className="flex-1 rounded-lg border border-border bg-input px-3 py-2 text-sm outline-none focus:border-primary"
+                className="flex-1 rounded-lg border border-border bg-input px-3 py-1.5 text-xs outline-none focus:border-primary"
               />
-              <Button size="icon" onClick={send} disabled={loading} className="bg-primary text-primary-foreground hover:bg-primary/90">
-                <Send className="h-4 w-4" />
+              <Button size="icon" onClick={send} disabled={loading} className="h-8 w-8 bg-primary text-primary-foreground hover:bg-primary/90">
+                <Send className="h-3 w-3" />
               </Button>
             </div>
           </motion.div>

@@ -84,8 +84,8 @@ unsigned long tPortaAberta     = 0;
 unsigned long tUltimoAlarmeTemp = 0;
 unsigned long tUltimoAlarmeMov  = 0;
 
-const unsigned long DT_DHT   = 2000;
-const unsigned long DT_MQTT  = 5000;
+const unsigned long DT_DHT   = 500;
+const unsigned long DT_MQTT  = 1000;
 const unsigned long DT_MOV   = 5000;
 const unsigned long DT_PORTA = 3000;
 
@@ -193,17 +193,17 @@ void reconnectMQTT() {
     Serial.print("MQTT...");
     if (client.connect("esp32-smarthome")) {
       // Tópicos existentes
-      client.subscribe("casa/sala-luz");
-      client.subscribe("casa/sala-ventilador");
-      client.subscribe("casa/quarto-luz");
-      client.subscribe("casa/quarto-ar");
-      client.subscribe("casa/cozinha-luz");
-      client.subscribe("casa/cozinha-cafeteira");
+      client.subscribe("smarthause-upx/sala-luz");
+      client.subscribe("smarthause-upx/sala-ventilador");
+      client.subscribe("smarthause-upx/quarto-luz");
+      client.subscribe("smarthause-upx/quarto-ar");
+      client.subscribe("smarthause-upx/cozinha-luz");
+      client.subscribe("smarthause-upx/cozinha-cafeteira");
       // Tópicos novos
-      client.subscribe("casa/porta/comando");
-      client.subscribe("casa/alarme/comando");
-      client.subscribe("casa/reset");
-      pub("casa/status", "online");
+      client.subscribe("smarthause-upx/porta/comando");
+      client.subscribe("smarthause-upx/alarme/comando");
+      client.subscribe("smarthause-upx/reset");
+      pub("smarthause-upx/status", "online");
       Serial.println("OK");
     } else {
       Serial.println("falhou rc=" + String(client.state()));
@@ -219,17 +219,17 @@ void callback(char* topic, byte* payload, unsigned int length) {
   String t = String(topic);
   Serial.println("[" + t + "] " + msg);
 
-  if      (t == "casa/sala-luz")           setDispositivo(PIN_SALA_LUZ,      msg == "ON", &salaLuz,      "casa/sala-luz/status");
-  else if (t == "casa/sala-ventilador")    setDispositivo(PIN_SALA_FAN,       msg == "ON", &salaFan,      "casa/sala-ventilador/status");
-  else if (t == "casa/quarto-luz")         setDispositivo(PIN_QUARTO_LUZ,     msg == "ON", &quartoLuz,    "casa/quarto-luz/status");
-  else if (t == "casa/quarto-ar")          setDispositivo(PIN_QUARTO_AR,      msg == "ON", &quartoAr,     "casa/quarto-ar/status");
-  else if (t == "casa/cozinha-luz")        setDispositivo(PIN_COZ_LUZ,        msg == "ON", &cozLuz,       "casa/cozinha-luz/status");
-  else if (t == "casa/cozinha-cafeteira")  setDispositivo(PIN_COZ_CAFETEIRA,  msg == "ON", &cozCafeteira, "casa/cozinha-cafeteira/status");
-  else if (t == "casa/porta/comando")      setPorta(msg == "ABRIR");
-  else if (t == "casa/alarme/comando")     { modoSeguranca = (msg == "ATIVAR"); setAlarme(msg == "ATIVAR"); }
-  else if (t == "casa/reset" && msg == "RESET_IA") {
+  if      (t == "smarthause-upx/sala-luz")           setDispositivo(PIN_SALA_LUZ,      msg == "ON", &salaLuz,      "smarthause-upx/sala-luz/status");
+  else if (t == "smarthause-upx/sala-ventilador")    setDispositivo(PIN_SALA_FAN,       msg == "ON", &salaFan,      "smarthause-upx/sala-ventilador/status");
+  else if (t == "smarthause-upx/quarto-luz")         setDispositivo(PIN_QUARTO_LUZ,     msg == "ON", &quartoLuz,    "smarthause-upx/quarto-luz/status");
+  else if (t == "smarthause-upx/quarto-ar")          setDispositivo(PIN_QUARTO_AR,      msg == "ON", &quartoAr,     "smarthause-upx/quarto-ar/status");
+  else if (t == "smarthause-upx/cozinha-luz")        setDispositivo(PIN_COZ_LUZ,        msg == "ON", &cozLuz,       "smarthause-upx/cozinha-luz/status");
+  else if (t == "smarthause-upx/cozinha-cafeteira")  setDispositivo(PIN_COZ_CAFETEIRA,  msg == "ON", &cozCafeteira, "smarthause-upx/cozinha-cafeteira/status");
+  else if (t == "smarthause-upx/porta/comando")      setPorta(msg == "ABRIR");
+  else if (t == "smarthause-upx/alarme/comando")     { modoSeguranca = (msg == "ATIVAR"); setAlarme(msg == "ATIVAR"); }
+  else if (t == "smarthause-upx/reset" && msg == "RESET_IA") {
     contadorLuzManual = 0; ciclosObservados = 0; iaAtiva = false;
-    pub("casa/ia/status", "inativa");
+    pub("smarthause-upx/ia/status", "inativa");
     Serial.println("IA reiniciada");
   }
 }
@@ -243,15 +243,15 @@ void lerDHT() {
 
   // Automação: temperatura alta liga ventilador da sala automaticamente
   if (temperatura > 28.0 && !salaFan) {
-    setDispositivo(PIN_SALA_FAN, true, &salaFan, "casa/sala-ventilador/status");
+    setDispositivo(PIN_SALA_FAN, true, &salaFan, "smarthause-upx/sala-ventilador/status");
     Serial.println("Auto: ventilador ligado (temp=" + String(temperatura) + ")");
   } else if (temperatura < 26.0 && salaFan) {
-    setDispositivo(PIN_SALA_FAN, false, &salaFan, "casa/sala-ventilador/status");
+    setDispositivo(PIN_SALA_FAN, false, &salaFan, "smarthause-upx/sala-ventilador/status");
   }
 
   if (temperatura > 35.0 && (millis() - tUltimoAlarmeTemp > 60000)) {
     tUltimoAlarmeTemp = millis();
-    pub("casa/alarme", "calor_extremo");
+    pub("smarthause-upx/alarme", "calor_extremo");
     beep(2000, 500);
   }
 }
@@ -261,13 +261,13 @@ void verificarPIR() {
     movimento  = true;
     tMovimento = millis();
     setLedRGB(true, true, false); // amarelo: movimento
-    pub("casa/movimento", "true");
+    pub("smarthause-upx/movimento", "true");
     Serial.println("Movimento detectado!");
     if (modoSeguranca) {
       setAlarme(true);
-      pub("casa/alarme", "intruso_detectado");
+      pub("smarthause-upx/alarme", "intruso_detectado");
       modoSeguranca = false; // desarma automaticamente após detectar movimento
-      pub("casa/alarme/status", "desarmado");
+      pub("smarthause-upx/alarme/status", "desarmado");
     }
   }
 }
@@ -289,7 +289,7 @@ void setPorta(bool abrir) {
   portaAberta  = abrir;
   tPortaAberta = millis();
   doorServo.write(abrir ? 90 : 0);
-  pub("casa/porta/status", abrir ? "aberta" : "fechada");
+  pub("smarthause-upx/porta/status", abrir ? "aberta" : "fechada");
   beep(abrir ? 1500 : 500, 150);
 }
 
@@ -327,7 +327,7 @@ void processarIALocal() {
 
     if (freq >= FREQ_ATIVACAO) {
       iaAtiva = true;
-      pub("casa/ia/status", "ativa");
+      pub("smarthause-upx/ia/status", "ativa");
       Serial.println("=== IA ATIVADA! freq=" + String(freq) + " ===");
       beep(1000, 100); delay(100);
       beep(1500, 100); delay(100);
@@ -343,10 +343,10 @@ void processarIALocal() {
 // ── Publicação ────────────────────────────────────────────────────────────────
 void publicarTelemetria() {
   char buf[16];
-  dtostrf(temperatura, 4, 1, buf); pub("casa/temperatura", buf);
-  dtostrf(umidade,     4, 1, buf); pub("casa/umidade",     buf);
-  pub("casa/movimento", movimento ? "true" : "false");
-  pub("casa/ia/status", iaAtiva   ? "ativa" : "inativa");
+  dtostrf(temperatura, 4, 1, buf); pub("smarthause-upx/temperatura", buf);
+  dtostrf(umidade,     4, 1, buf); pub("smarthause-upx/umidade",     buf);
+  pub("smarthause-upx/movimento", movimento ? "true" : "false");
+  pub("smarthause-upx/ia/status", iaAtiva   ? "ativa" : "inativa");
 }
 
 void pub(const char* topico, const char* payload) {

@@ -1,5 +1,6 @@
 import axios from "axios";
 import { io, type Socket } from "socket.io-client";
+import type { QueryClient } from "@tanstack/react-query";
 
 export const API_BASE = "http://localhost:3001";
 
@@ -14,6 +15,40 @@ export function getSocket(): Socket {
     socket = io(API_BASE, { transports: ["websocket", "polling"], autoConnect: true });
   }
   return socket;
+}
+
+// Poller global — roda fora do ciclo do React, não é afetado pelo Strict Mode
+let _pollerStarted = false;
+
+export function startGlobalPoller(queryClient: QueryClient) {
+  if (_pollerStarted) return;
+  _pollerStarted = true;
+
+  const fetchAndUpdate = async () => {
+    try {
+      const { data } = await api.get<Telemetria>("/api/telemetria/atual");
+      queryClient.setQueryData(["telemetria"], data);
+    } catch {}
+    try {
+      const { data } = await api.get<Device[]>("/api/devices");
+      if (data?.length) queryClient.setQueryData(["devices"], data);
+    } catch {}
+  };
+
+  fetchAndUpdate();
+  setInterval(fetchAndUpdate, 1000);
+
+  // Socket.IO como complemento para atualizações imediatas
+  const s = getSocket();
+  (window as any).__smarthouse_socket = s;
+  s.on("telemetria", (data: Telemetria) => {
+    queryClient.setQueryData(["telemetria"], (old: Telemetria) => ({ ...old, ...data }));
+  });
+  s.on("device_update", (updated: Device) => {
+    queryClient.setQueryData(["devices"], (old: Device[] = []) =>
+      old.map((d) => (d.id === updated.id ? updated : d))
+    );
+  });
 }
 
 export interface Device {
