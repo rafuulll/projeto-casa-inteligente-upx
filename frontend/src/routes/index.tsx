@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+// useQueryClient é usado para devices e socket updates
 import { Activity, Bell, BellRing, Droplets, DoorOpen, DoorClosed, Footprints, ShieldCheck, ShieldAlert, Thermometer } from "lucide-react";
-import { api, type AcaoHistorico, type Device, type Telemetria } from "@/lib/api";
+import { api, getSocket, subscribeTelemetria, type AcaoHistorico, type Device, type Telemetria } from "@/lib/api";
 import { SensorCard } from "@/components/smart/SensorCard";
 import { DeviceCard } from "@/components/smart/DeviceCard";
 import { Button } from "@/components/ui/button";
@@ -11,16 +12,8 @@ export const Route = createFileRoute("/")({ component: Dashboard });
 
 function Dashboard() {
   const queryClient = useQueryClient();
+  const [tele, setTele] = useState<Telemetria>({ temperatura: 0, umidade: 0, movimento: false, ia_status: "aprendendo", porta: "fechada", alarme: "desarmado" });
   const [historico, setHistorico] = useState<AcaoHistorico[]>([]);
-  const [alarme, setAlarme] = useState<"armado" | "desarmado">("desarmado");
-  const [porta, setPorta] = useState<"aberta" | "fechada">("fechada");
-
-  const { data: tele } = useQuery<Telemetria>({
-    queryKey: ["telemetria"],
-    queryFn: () => api.get<Telemetria>("/api/telemetria/atual").then((r) => r.data),
-    initialData: { temperatura: 0, umidade: 0, movimento: false, ia_status: "aprendendo", porta: "fechada", alarme: "desarmado" },
-    staleTime: 0,
-  });
 
   const { data: devices = [] } = useQuery<Device[]>({
     queryKey: ["devices"],
@@ -28,19 +21,27 @@ function Dashboard() {
     staleTime: 0,
   });
 
+  // Carrega dados iniciais
   useEffect(() => {
+    api.get<Telemetria>("/api/telemetria/atual").then((r) => setTele(r.data)).catch(() => {});
     api.get("/api/logs").then((r) => {
-      const logs = (r.data ?? []).map((l: any) => ({
+      setHistorico((r.data ?? []).map((l: any) => ({
         id: String(l.id),
         timestamp: l.createdAt,
         descricao: `${l.device?.name ?? l.deviceId} ${l.action === "ON" ? "ligado" : "desligado"}`,
         tipo: l.action === "ON" ? "on" : "off",
-      }));
-      setHistorico(logs);
+      })));
     }).catch(() => {});
+  }, []);
 
-    const s = (window as any).__smarthouse_socket;
-    if (!s) return;
+  // SSE para atualizações em tempo real — usa o subscriber global do api.ts
+  useEffect(() => {
+    return subscribeTelemetria((data) => setTele(data));
+  }, []);
+
+  // Socket.IO para logs em tempo real
+  useEffect(() => {
+    const s = getSocket();
     const onLog = (l: any) => {
       const acao: AcaoHistorico = {
         id: String(l.id),
@@ -50,14 +51,15 @@ function Dashboard() {
       };
       setHistorico((h) => [acao, ...h].slice(0, 20));
     };
+    const onDevUpdate = (updated: Device) => {
+      queryClient.setQueryData(["devices"], (old: Device[] = []) =>
+        old.map((d) => (d.id === updated.id ? updated : d))
+      );
+    };
     s.on("new_log", onLog);
-    return () => s.off("new_log", onLog);
+    s.on("device_update", onDevUpdate);
+    return () => { s.off("new_log", onLog); s.off("device_update", onDevUpdate); };
   }, [queryClient]);
-
-  useEffect(() => {
-    if (tele?.alarme) setAlarme(tele.alarme as "armado" | "desarmado");
-    if (tele?.porta)  setPorta(tele.porta as "aberta" | "fechada");
-  }, [tele?.alarme, tele?.porta]);
 
   const toggle = async (id: string) => {
     queryClient.setQueryData(["devices"], (old: Device[] = []) =>
@@ -67,12 +69,12 @@ function Dashboard() {
   };
 
   const portaAcao = async (acao: "abrir" | "fechar") => {
-    setPorta(acao === "abrir" ? "aberta" : "fechada");
+    setTele((t) => ({ ...t, porta: acao === "abrir" ? "aberta" : "fechada" }));
     try { await api.post(`/api/porta/${acao}`); } catch {}
   };
 
   const alarmeAcao = async (acao: "armar" | "desarmar") => {
-    setAlarme(acao === "armar" ? "armado" : "desarmado");
+    setTele((t) => ({ ...t, alarme: acao === "armar" ? "armado" : "desarmado" }));
     try { await api.post(`/api/alarme/${acao}`); } catch {}
   };
 
@@ -99,8 +101,8 @@ function Dashboard() {
           <SensorCard
             icon={Footprints}
             label="Movimento"
-            value={tele?.movimento ? (alarme === "armado" ? "Alarme!" : "Detectado") : "Inativo"}
-            accent={tele?.movimento && alarme === "armado" ? "warning" : tele?.movimento ? "destructive" : "primary"}
+            value={tele?.movimento ? (tele.alarme === "armado" ? "Alarme!" : "Detectado") : "Inativo"}
+            accent={tele?.movimento && tele.alarme === "armado" ? "warning" : tele?.movimento ? "destructive" : "primary"}
             status={tele?.movimento ? "alert" : "idle"}
             trend="PIR · entrada"
           />
@@ -112,9 +114,9 @@ function Dashboard() {
           <div>
             <div className="text-xs uppercase tracking-wider text-muted-foreground">Porta principal</div>
             <div className="mt-2 flex items-center gap-2 font-mono text-2xl font-semibold">
-              {porta === "aberta" ? <DoorOpen className="h-6 w-6 text-warning" /> : <DoorClosed className="h-6 w-6 text-primary" />}
-              <span className={porta === "aberta" ? "text-warning" : "text-primary"}>
-                {porta === "aberta" ? "Aberta" : "Fechada"}
+              {tele.porta === "aberta" ? <DoorOpen className="h-6 w-6 text-warning" /> : <DoorClosed className="h-6 w-6 text-primary" />}
+              <span className={tele.porta === "aberta" ? "text-warning" : "text-primary"}>
+                {tele.porta === "aberta" ? "Aberta" : "Fechada"}
               </span>
             </div>
           </div>
@@ -127,9 +129,9 @@ function Dashboard() {
           <div>
             <div className="text-xs uppercase tracking-wider text-muted-foreground">Alarme</div>
             <div className="mt-2 flex items-center gap-2 font-mono text-2xl font-semibold">
-              {alarme === "armado" ? <ShieldCheck className="h-6 w-6 text-success" /> : <ShieldAlert className="h-6 w-6 text-destructive" />}
-              <span className={alarme === "armado" ? "text-success" : "text-destructive"}>
-                {alarme === "armado" ? "Armado" : "Desarmado"}
+              {tele.alarme === "armado" ? <ShieldCheck className="h-6 w-6 text-success" /> : <ShieldAlert className="h-6 w-6 text-destructive" />}
+              <span className={tele.alarme === "armado" ? "text-success" : "text-destructive"}>
+                {tele.alarme === "armado" ? "Armado" : "Desarmado"}
               </span>
             </div>
           </div>

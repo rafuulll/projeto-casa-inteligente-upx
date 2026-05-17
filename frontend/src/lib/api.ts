@@ -17,38 +17,24 @@ export function getSocket(): Socket {
   return socket;
 }
 
-// Poller global — roda fora do ciclo do React, não é afetado pelo Strict Mode
-let _pollerStarted = false;
+// SSE global — subscriber pattern, funciona fora do ciclo React/SSR
+type TeleListener = (data: Telemetria) => void;
+const _teleListeners = new Set<TeleListener>();
 
-export function startGlobalPoller(queryClient: QueryClient) {
-  if (_pollerStarted) return;
-  _pollerStarted = true;
+export function subscribeTelemetria(fn: TeleListener): () => void {
+  _teleListeners.add(fn);
+  return () => _teleListeners.delete(fn);
+}
 
-  const fetchAndUpdate = async () => {
+if (typeof window !== "undefined") {
+  const es = new EventSource(`${API_BASE}/api/events`);
+  es.onmessage = (e) => {
     try {
-      const { data } = await api.get<Telemetria>("/api/telemetria/atual");
-      queryClient.setQueryData(["telemetria"], data);
-    } catch {}
-    try {
-      const { data } = await api.get<Device[]>("/api/devices");
-      if (data?.length) queryClient.setQueryData(["devices"], data);
+      const data: Telemetria = JSON.parse(e.data);
+      _teleListeners.forEach((fn) => fn(data));
     } catch {}
   };
-
-  fetchAndUpdate();
-  setInterval(fetchAndUpdate, 1000);
-
-  // Socket.IO como complemento para atualizações imediatas
-  const s = getSocket();
-  (window as any).__smarthouse_socket = s;
-  s.on("telemetria", (data: Telemetria) => {
-    queryClient.setQueryData(["telemetria"], (old: Telemetria) => ({ ...old, ...data }));
-  });
-  s.on("device_update", (updated: Device) => {
-    queryClient.setQueryData(["devices"], (old: Device[] = []) =>
-      old.map((d) => (d.id === updated.id ? updated : d))
-    );
-  });
+  es.onerror = () => {};
 }
 
 export interface Device {

@@ -115,7 +115,7 @@ async function applyDeviceState(deviceId, state) {
   if (!device) return null
 
   // Sempre publica MQTT para garantir sincronismo com o ESP32/Wokwi
-  _mqttClient.publish(`casa/${deviceId}`, state ? 'ON' : 'OFF')
+  _mqttClient.publish(`smarthause-upx/${deviceId}`, state ? 'ON' : 'OFF')
 
   if (device.state === state) return device
 
