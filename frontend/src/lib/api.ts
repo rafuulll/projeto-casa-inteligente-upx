@@ -2,7 +2,7 @@ import axios from "axios";
 import { io, type Socket } from "socket.io-client";
 import type { QueryClient } from "@tanstack/react-query";
 
-export const API_BASE = "http://localhost:3001";
+export const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:3001";
 
 export const api = axios.create({
   baseURL: API_BASE,
@@ -17,25 +17,6 @@ export function getSocket(): Socket {
   return socket;
 }
 
-// SSE global — subscriber pattern, funciona fora do ciclo React/SSR
-type TeleListener = (data: Telemetria) => void;
-const _teleListeners = new Set<TeleListener>();
-
-export function subscribeTelemetria(fn: TeleListener): () => void {
-  _teleListeners.add(fn);
-  return () => _teleListeners.delete(fn);
-}
-
-if (typeof window !== "undefined") {
-  const es = new EventSource(`${API_BASE}/api/events`);
-  es.onmessage = (e) => {
-    try {
-      const data: Telemetria = JSON.parse(e.data);
-      _teleListeners.forEach((fn) => fn(data));
-    } catch {}
-  };
-  es.onerror = () => {};
-}
 
 export interface Device {
   id: string;

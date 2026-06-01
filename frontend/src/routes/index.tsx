@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 // useQueryClient é usado para devices e socket updates
 import { Activity, Bell, BellRing, Droplets, DoorOpen, DoorClosed, Footprints, ShieldCheck, ShieldAlert, Thermometer } from "lucide-react";
-import { api, getSocket, subscribeTelemetria, type AcaoHistorico, type Device, type Telemetria } from "@/lib/api";
+import { API_BASE, api, getSocket, type AcaoHistorico, type Device, type Telemetria } from "@/lib/api";
 import { SensorCard } from "@/components/smart/SensorCard";
 import { DeviceCard } from "@/components/smart/DeviceCard";
 import { Button } from "@/components/ui/button";
@@ -34,9 +34,22 @@ function Dashboard() {
     }).catch(() => {});
   }, []);
 
-  // SSE para atualizações em tempo real — usa o subscriber global do api.ts
+  // SSE com reconexão automática
   useEffect(() => {
-    return subscribeTelemetria((data) => setTele(data));
+    let es: EventSource;
+    let reconnectTimer: ReturnType<typeof setTimeout>;
+
+    const connect = () => {
+      es = new EventSource(`${API_BASE}/api/events`);
+      es.onmessage = (e) => { try { setTele(JSON.parse(e.data)); } catch {} };
+      es.onerror = () => {
+        es.close();
+        reconnectTimer = setTimeout(connect, 3000);
+      };
+    };
+
+    connect();
+    return () => { es?.close(); clearTimeout(reconnectTimer); };
   }, []);
 
   // Socket.IO para logs em tempo real

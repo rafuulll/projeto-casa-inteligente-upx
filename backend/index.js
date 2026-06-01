@@ -39,11 +39,13 @@ const RULE_COOLDOWN_MS = 60000
 
 function parseRuleTrigger(trigger) {
   const t = trigger.toLowerCase().trim()
+  const delayMatch = t.match(/(\d+)\s*s\s*$/)
+  const delay = delayMatch ? parseInt(delayMatch[1]) * 1000 : 0
   const tempMatch = t.match(/temp(?:eratura)?\s*([><]=?)\s*(\d+(?:\.\d+)?)/)
-  if (tempMatch) return { type: 'temp', op: tempMatch[1], value: parseFloat(tempMatch[2]) }
+  if (tempMatch) return { type: 'temp', op: tempMatch[1], value: parseFloat(tempMatch[2]), delay }
   const humMatch = t.match(/umidade?\s*([><]=?)\s*(\d+(?:\.\d+)?)/)
-  if (humMatch) return { type: 'humidity', op: humMatch[1], value: parseFloat(humMatch[2]) }
-  if (t.includes('movimento') || t.includes('pir')) return { type: 'movement' }
+  if (humMatch) return { type: 'humidity', op: humMatch[1], value: parseFloat(humMatch[2]), delay }
+  if (t.includes('movimento') || t.includes('pir')) return { type: 'movement', delay }
   return null
 }
 
@@ -63,14 +65,22 @@ function evalCondition(condition, tel) {
 }
 
 function inferDeviceAction(nome, descricao) {
+  const direct = descricao.match(/^device:([^:]+):(\w+)$/)
+  if (direct) {
+    const id  = direct[1]
+    const act = direct[2]
+    if (id === 'porta')  return { deviceId: 'porta',  state: act === 'ABRIR' }
+    if (id === 'alarme') return { deviceId: 'alarme', state: act === 'ARMAR' }
+    return { deviceId: id, state: act === 'ON' }
+  }
   const text = (nome + ' ' + descricao).toLowerCase()
   let deviceId = null
-  if      (text.match(/ar.condicionado|quarto.ar/))           deviceId = 'quarto-ar'
-  else if (text.match(/ventilador|sala.ventilador/))           deviceId = 'sala-ventilador'
-  else if (text.match(/luz.*(sala)|sala.*(luz)/))              deviceId = 'sala-luz'
-  else if (text.match(/luz.*(quarto)|quarto.*(luz)/))          deviceId = 'quarto-luz'
-  else if (text.match(/luz.*(cozinha)|cozinha.*(luz)/))        deviceId = 'cozinha-luz'
-  else if (text.includes('cafeteira'))                         deviceId = 'cozinha-cafeteira'
+  if      (text.match(/ar.condicionado|quarto.ar/))                deviceId = 'quarto-ar'
+  else if (text.match(/ventilador|sala.ventilador/))                deviceId = 'sala-ventilador'
+  else if (text.match(/luz.*(sala)|sala.*(luz)/))                   deviceId = 'sala-luz'
+  else if (text.match(/luz.*(quarto)|quarto.*(luz)/))               deviceId = 'quarto-luz'
+  else if (text.match(/luz.*(cozinha)|cozinha.*(luz)/))             deviceId = 'cozinha-luz'
+  else if (text.includes('cafeteira') || text.includes('banheiro')) deviceId = 'cozinha-cafeteira'
   let state = null
   if      (text.match(/deslig|desativ|\boff\b/)) state = false
   else if (text.match(/\bliga|\bativ|\bon\b/))   state = true
@@ -91,15 +101,56 @@ async function processRules() {
       if (!deviceId || state === null) continue
       const device = await prisma.device.findUnique({ where: { id: deviceId } })
       if (!device || device.state === state) { ruleCooldowns.set(rule.id, Date.now()); continue }
-      console.log(`[Regra] "${rule.nome}" → ${deviceId} ${state ? 'ON' : 'OFF'}`)
+      console.log(`[Regra] "${rule.nome}" → ${deviceId} ${state ? 'ON' : 'OFF'}${condition.delay ? ` (delay ${condition.delay}ms)` : ''}`)
       ruleCooldowns.set(rule.id, Date.now())
-      const updated = await prisma.device.update({ where: { id: deviceId }, data: { state } })
-      const log = await prisma.log.create({ data: { deviceId, action: state ? 'ON' : 'OFF' }, include: { device: true } })
-      mqttClient.publish(`smarthause-upx/${deviceId}`, state ? 'ON' : 'OFF')
-      io.emit('device_update', toDeviceDTO(updated))
-      io.emit('new_log', { ...log, descricao: `${updated.name} ${state ? 'ligado' : 'desligado'} (regra: ${rule.nome})`, tipo: state ? 'on' : 'off' })
+      const execAction = async () => {
+        if (deviceId === 'porta') {
+          const cmd = state ? 'ABRIR' : 'FECHAR'
+          mqttClient.publish('upx2025/casa/porta/comando', cmd)
+          telemetria.doorStatus = state ? 'aberta' : 'fechada'
+          telemetria.updatedAt  = new Date()
+          io.emit('telemetria', toTelemetriaDTO(telemetria))
+          broadcastSSE()
+          return
+        }
+        if (deviceId === 'alarme') {
+          const cmd = state ? 'ATIVAR' : 'DESATIVAR'
+          mqttClient.publish('upx2025/casa/alarme/comando', cmd)
+          telemetria.alarmeStatus = state ? 'armado' : 'desarmado'
+          io.emit('telemetria', toTelemetriaDTO(telemetria))
+          broadcastSSE()
+          return
+        }
+        const updated = await prisma.device.update({ where: { id: deviceId }, data: { state } })
+        const log = await prisma.log.create({ data: { deviceId, action: state ? 'ON' : 'OFF' }, include: { device: true } })
+        mqttClient.publish(`upx2025/casa/${deviceId}`, state ? 'ON' : 'OFF')
+        io.emit('device_update', toDeviceDTO(updated))
+        io.emit('new_log', { ...log, descricao: `${updated.name} ${state ? 'ligado' : 'desligado'} (regra: ${rule.nome})`, tipo: state ? 'on' : 'off' })
+      }
+      if (condition.delay > 0) setTimeout(execAction, condition.delay)
+      else await execAction()
     }
   } catch (e) { console.error('[Regra] Erro:', e.message) }
+}
+
+async function triggerPortaRules() {
+  try {
+    const rules = await prisma.rule.findMany({ where: { ativa: true } })
+    for (const rule of rules) {
+      const t = rule.trigger.toLowerCase().trim()
+      const match = t.match(/porta\s+aberta\s+(\d+)\s*s/)
+      if (!match) continue
+      const segundos = parseInt(match[1])
+      console.log(`[Regra] "${rule.nome}" → fecha porta em ${segundos}s`)
+      setTimeout(() => {
+        mqttClient.publish('upx2025/casa/porta/comando', 'FECHAR')
+        telemetria.doorStatus = 'fechada'
+        telemetria.updatedAt  = new Date()
+        io.emit('telemetria', toTelemetriaDTO(telemetria))
+        broadcastSSE()
+      }, segundos * 1000)
+    }
+  } catch (e) { console.error('[Porta] Erro:', e.message) }
 }
 
 // ── Estado de telemetria em memória ──────────────────────────────────────────
@@ -122,23 +173,23 @@ mqttClient.on('connect', () => {
   console.log(`MQTT conectado: ${mqttBroker}`)
 
   // Dispositivos (confirmações do ESP32)
-  mqttClient.subscribe('smarthause-upx/+/status')
+  mqttClient.subscribe('upx2025/casa/+/status')
 
   // Telemetria
-  mqttClient.subscribe('smarthause-upx/temperatura')
-  mqttClient.subscribe('smarthause-upx/umidade')
-  mqttClient.subscribe('smarthause-upx/movimento')
-  mqttClient.subscribe('smarthause-upx/ia/status')
-  mqttClient.subscribe('smarthause-upx/alarme')
+  mqttClient.subscribe('upx2025/casa/temperatura')
+  mqttClient.subscribe('upx2025/casa/umidade')
+  mqttClient.subscribe('upx2025/casa/movimento')
+  mqttClient.subscribe('upx2025/casa/ia/status')
+  mqttClient.subscribe('upx2025/casa/alarme')
 })
 
 mqttClient.on('message', (topic, message) => {
   const msg   = message.toString()
   const parts = topic.split('/')
 
-  // Confirmações de dispositivos: smarthause-upx/sala-luz/status, etc.
-  if (parts.length === 3 && parts[2] === 'status' && parts[1] !== 'ia' && parts[1] !== 'porta') {
-    const deviceId = parts[1]
+  // Confirmações de dispositivos: upx2025/casa/sala-luz/status, etc.
+  if (parts.length === 4 && parts[3] === 'status' && parts[2] !== 'ia' && parts[2] !== 'porta') {
+    const deviceId = parts[2]
     const newState = msg === 'ON'
     console.log(`ESP32 confirmou [${deviceId}]: ${msg}`)
 
@@ -156,7 +207,7 @@ mqttClient.on('message', (topic, message) => {
   }
 
   switch (topic) {
-    case 'smarthause-upx/temperatura':
+    case 'upx2025/casa/temperatura':
       telemetria.temperature = parseFloat(msg)
       telemetria.updatedAt   = new Date()
       io.emit('telemetria', toTelemetriaDTO(telemetria))
@@ -164,7 +215,7 @@ mqttClient.on('message', (topic, message) => {
       processRules()
       break
 
-    case 'smarthause-upx/umidade':
+    case 'upx2025/casa/umidade':
       telemetria.humidity  = parseFloat(msg)
       telemetria.updatedAt = new Date()
       io.emit('telemetria', toTelemetriaDTO(telemetria))
@@ -172,7 +223,7 @@ mqttClient.on('message', (topic, message) => {
       processRules()
       break
 
-    case 'smarthause-upx/movimento':
+    case 'upx2025/casa/movimento':
       telemetria.movement = msg === 'true'
       if (msg === 'true') {
         telemetria.lastMovement = new Date()
@@ -185,21 +236,29 @@ mqttClient.on('message', (topic, message) => {
       broadcastSSE()
       break
 
-    case 'smarthause-upx/ia/status':
+    case 'upx2025/casa/ia/status':
       telemetria.iaStatus  = msg
       telemetria.updatedAt = new Date()
       io.emit('telemetria', toTelemetriaDTO(telemetria))
       break
 
-    case 'smarthause-upx/porta/status':
+    case 'upx2025/casa/porta/status':
       telemetria.doorStatus = msg
       telemetria.updatedAt  = new Date()
       io.emit('telemetria', toTelemetriaDTO(telemetria))
+      broadcastSSE()
+      if (msg === 'aberta') triggerPortaRules()
       break
 
-    case 'smarthause-upx/alarme':
+    case 'upx2025/casa/alarme':
       console.log(`ALARME: ${msg}`)
       io.emit('alarm_event', { event: msg, timestamp: new Date() })
+      if (msg === 'intruso_detectado') {
+        telemetria.alarmeStatus = 'desarmado'
+        telemetria.updatedAt = new Date()
+        io.emit('telemetria', toTelemetriaDTO(telemetria))
+        broadcastSSE()
+      }
       break
   }
 })
@@ -219,11 +278,19 @@ setInterval(async () => {
 // ── IA Service ────────────────────────────────────────────────────────────────
 if (process.env.ANTHROPIC_API_KEY) {
   try {
-    aiService.init(prisma, mqttClient, io, (alarmeStatus) => {
-      telemetria.alarmeStatus = alarmeStatus
-      io.emit('telemetria', toTelemetriaDTO(telemetria))
-      broadcastSSE()
-    })
+    aiService.init(prisma, mqttClient, io,
+      (alarmeStatus) => {
+        telemetria.alarmeStatus = alarmeStatus
+        io.emit('telemetria', toTelemetriaDTO(telemetria))
+        broadcastSSE()
+      },
+      (portaStatus) => {
+        telemetria.doorStatus = portaStatus
+        telemetria.updatedAt  = new Date()
+        io.emit('telemetria', toTelemetriaDTO(telemetria))
+        broadcastSSE()
+      }
+    )
     telemetria.iaStatus = 'ativa'
   } catch (e) {
     console.error('Falha ao iniciar IA Service:', e.message)
@@ -246,10 +313,15 @@ async function seed() {
         { id: 'quarto-luz',        name: 'Luz do Quarto',   room: 'Quarto',  type: 'light' },
         { id: 'quarto-ar',         name: 'Ar-condicionado', room: 'Quarto',  type: 'ac'    },
         { id: 'cozinha-luz',       name: 'Luz da Cozinha',  room: 'Cozinha', type: 'light' },
-        { id: 'cozinha-cafeteira', name: 'Cafeteira',       room: 'Cozinha', type: 'plug'  },
+        { id: 'cozinha-cafeteira', name: 'Luz do Banheiro', room: 'Banheiro', type: 'light' },
       ]
     })
     console.log('Dispositivos criados!')
+  } else {
+    await prisma.device.update({
+      where: { id: 'cozinha-cafeteira' },
+      data:  { name: 'Luz do Banheiro', room: 'Banheiro', type: 'light' }
+    }).catch(() => {})
   }
 
   const ruleCount = await prisma.rule.count()
@@ -294,7 +366,7 @@ app.post('/api/devices/:id/toggle', async (req, res) => {
     include: { device: true }
   })
 
-  mqttClient.publish(`smarthause-upx/${id}`, newState ? 'ON' : 'OFF')
+  mqttClient.publish(`upx2025/casa/${id}`, newState ? 'ON' : 'OFF')
   io.emit('device_update', toDeviceDTO(updated))
   io.emit('new_log', { ...log, descricao: `${updated.name} ${newState ? 'ligado' : 'desligado'}`, tipo: newState ? 'on' : 'off' })
 
@@ -308,7 +380,7 @@ app.get('/api/telemetria/atual', (req, res) => {
 
 app.get('/api/telemetria/historico', async (req, res) => {
   const { periodo = '24h' } = req.query
-  const horas = { '1h': 1, '6h': 6, '24h': 24, '7d': 168 }[periodo] ?? 24
+  const horas = { '1h': 1, '6h': 6, '24h': 24, '1d': 24, '7d': 168, '30d': 720 }[periodo] ?? 24
   const desde = new Date(Date.now() - horas * 60 * 60 * 1000)
 
   const dados = await prisma.telemetry.findMany({
@@ -340,7 +412,11 @@ app.get('/api/movimento', async (req, res) => {
 app.post('/api/porta/:acao', (req, res) => {
   const { acao } = req.params
   if (!['abrir', 'fechar'].includes(acao)) return res.status(400).json({ error: 'Ação inválida' })
-  mqttClient.publish('smarthause-upx/porta/comando', acao === 'abrir' ? 'ABRIR' : 'FECHAR')
+  mqttClient.publish('upx2025/casa/porta/comando', acao === 'abrir' ? 'ABRIR' : 'FECHAR')
+  telemetria.doorStatus = acao === 'abrir' ? 'aberta' : 'fechada'
+  telemetria.updatedAt  = new Date()
+  io.emit('telemetria', toTelemetriaDTO(telemetria))
+  broadcastSSE()
   res.json({ ok: true, acao })
 })
 
@@ -349,7 +425,7 @@ app.post('/api/alarme/:acao', (req, res) => {
   const ligar    = ['ativar', 'armar'].includes(acao)
   const desligar = ['desativar', 'desarmar'].includes(acao)
   if (!ligar && !desligar) return res.status(400).json({ error: 'Ação inválida' })
-  mqttClient.publish('smarthause-upx/alarme/comando', ligar ? 'ATIVAR' : 'DESATIVAR')
+  mqttClient.publish('upx2025/casa/alarme/comando', ligar ? 'ATIVAR' : 'DESATIVAR')
   telemetria.alarmeStatus = ligar ? 'armado' : 'desarmado'
   io.emit('telemetria', toTelemetriaDTO(telemetria))
   broadcastSSE()
@@ -401,7 +477,7 @@ app.delete('/api/ai/regras/:id', async (req, res) => {
 })
 
 app.post('/api/ia/reset', (req, res) => {
-  mqttClient.publish('smarthause-upx/reset', 'RESET_IA')
+  mqttClient.publish('upx2025/casa/reset', 'RESET_IA')
   res.json({ ok: true })
 })
 

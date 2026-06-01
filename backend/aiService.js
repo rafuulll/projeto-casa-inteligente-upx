@@ -10,13 +10,14 @@ function getClient() {
   return _client
 }
 
-let _prisma, _mqttClient, _io, _setAlarmeStatus
+let _prisma, _mqttClient, _io, _setAlarmeStatus, _setPortaStatus
 
-function init(prisma, mqttClient, io, setAlarmeStatus) {
+function init(prisma, mqttClient, io, setAlarmeStatus, setPortaStatus) {
   _prisma           = prisma
   _mqttClient       = mqttClient
   _io               = io
   _setAlarmeStatus  = setAlarmeStatus
+  _setPortaStatus   = setPortaStatus
 }
 
 // ── Ferramentas (formato Anthropic) ──────────────────────────────────────────
@@ -115,7 +116,7 @@ async function applyDeviceState(deviceId, state) {
   if (!device) return null
 
   // Sempre publica MQTT para garantir sincronismo com o ESP32/Wokwi
-  _mqttClient.publish(`smarthause-upx/${deviceId}`, state ? 'ON' : 'OFF')
+  _mqttClient.publish(`upx2025/casa/${deviceId}`, state ? 'ON' : 'OFF')
 
   if (device.state === state) return device
 
@@ -207,13 +208,14 @@ async function executeTool(name, args) {
 
     case 'control_alarm': {
       const cmd = args.state ? 'ATIVAR' : 'DESATIVAR'
-      _mqttClient.publish('smarthause-upx/alarme/comando', cmd)
+      _mqttClient.publish('upx2025/casa/alarme/comando', cmd)
       if (_setAlarmeStatus) _setAlarmeStatus(args.state ? 'armado' : 'desarmado')
       return `Alarme ${args.state ? 'ativado' : 'desativado'} com sucesso.`
     }
 
     case 'control_door': {
-      _mqttClient.publish('smarthause-upx/porta/comando', args.action === 'abrir' ? 'ABRIR' : 'FECHAR')
+      _mqttClient.publish('upx2025/casa/porta/comando', args.action === 'abrir' ? 'ABRIR' : 'FECHAR')
+      if (_setPortaStatus) _setPortaStatus(args.action === 'abrir' ? 'aberta' : 'fechada')
       return `Porta ${args.action === 'abrir' ? 'aberta' : 'fechada'} com sucesso.`
     }
 

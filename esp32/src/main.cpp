@@ -7,26 +7,22 @@
 #include <ESP32Servo.h>
 
 // ── WiFi / MQTT ───────────────────────────────────────────────────────────────
-const char* ssid        = "Wokwi-GUEST";
-const char* password    = "";
+const char* ssid        = "iPhone de Murilo";
+const char* password    = "murilete";
 const char* mqtt_server = "broker.hivemq.com";
 const int   mqtt_port   = 1883;
 
 // ── Modo de operação ─────────────────────────────────────────────────────────
-// Wokwi (LEDs):        RELAY_ON = HIGH, RELAY_OFF = LOW
-// Hardware (relé active LOW): RELAY_ON = LOW,  RELAY_OFF = HIGH
 #define RELAY_ON  HIGH
 #define RELAY_OFF LOW
 
-// ── Pinos existentes (dispositivos) ──────────────────────────────────────────
-#define PIN_SALA_LUZ        2
-#define PIN_SALA_FAN        4
-#define PIN_QUARTO_LUZ      5
-#define PIN_QUARTO_AR      18
-#define PIN_COZ_LUZ        19
-#define PIN_COZ_CAFETEIRA  21
+// ── Pinos dos dispositivos ────────────────────────────────────────────────────
+#define PIN_SALA_LUZ       2   // Luz da Sala
+#define PIN_QUARTO_LUZ     4   // Luz do Quarto
+#define PIN_COZ_LUZ        5   // Luz da Cozinha
+#define PIN_COZ_CAFETEIRA 18   // Luz do Banheiro
 
-// ── Pinos novos (sensores e atuadores) ───────────────────────────────────────
+// ── Pinos sensores e atuadores ────────────────────────────────────────────────
 #define PIN_DHT22          15
 #define PIN_BUZZER         17
 #define PIN_OLED_SCL       22
@@ -34,8 +30,6 @@ const int   mqtt_port   = 1883;
 #define PIN_SERVO          25
 #define PIN_LED_R          26
 #define PIN_PIR            27
-#define PIN_TRIG           32
-#define PIN_ECHO           33
 #define PIN_LED_G          13
 #define PIN_LED_B          14
 
@@ -48,15 +42,13 @@ DHT                 dht(PIN_DHT22, DHT_TYPE);
 Adafruit_SSD1306    display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 Servo               doorServo;
 
-// ── Estado dos dispositivos existentes ───────────────────────────────────────
+// ── Estado dos dispositivos ───────────────────────────────────────────────────
 bool salaLuz      = false;
-bool salaFan      = false;
 bool quartoLuz    = false;
-bool quartoAr     = false;
 bool cozLuz       = false;
 bool cozCafeteira = false;
 
-// ── Estado dos novos atuadores ────────────────────────────────────────────────
+// ── Estado dos atuadores ──────────────────────────────────────────────────────
 bool portaAberta   = false;
 bool alarmeAtivo   = false;
 bool modoSeguranca = false;
@@ -66,28 +58,15 @@ float temperatura = 0;
 float umidade     = 0;
 bool  movimento   = false;
 
-// ── IA Local ──────────────────────────────────────────────────────────────────
-int           contadorLuzManual = 0;
-int           ciclosObservados  = 0;
-bool          iaAtiva           = false;
-unsigned long ultimoCicloIA     = 0;
-
-const unsigned long CICLO_MS      = 20000;
-const int           CICLOS_TREINO = 5;
-const float         FREQ_ATIVACAO = 0.80f;
-
 // ── Timers ────────────────────────────────────────────────────────────────────
-unsigned long tUltimoDHT       = 0;
-unsigned long tUltimoMQTT      = 0;
-unsigned long tMovimento       = 0;
-unsigned long tPortaAberta     = 0;
+unsigned long tUltimoDHT        = 0;
+unsigned long tUltimoMQTT       = 0;
+unsigned long tMovimento        = 0;
 unsigned long tUltimoAlarmeTemp = 0;
-unsigned long tUltimoAlarmeMov  = 0;
-
-const unsigned long DT_DHT   = 500;
-const unsigned long DT_MQTT  = 1000;
-const unsigned long DT_MOV   = 5000;
-const unsigned long DT_PORTA = 3000;
+const unsigned long DT_DHT     = 500;
+const unsigned long DT_MQTT    = 1000;
+const unsigned long DT_MOV     = 10000;
+const unsigned long PIR_WARMUP = 30000;
 
 // ── MQTT ──────────────────────────────────────────────────────────────────────
 WiFiClient   espClient;
@@ -104,7 +83,6 @@ void setPorta(bool abrir);
 void setAlarme(bool estado);
 void setLedRGB(bool r, bool g, bool b);
 void beep(int freq, int ms);
-void processarIALocal();
 void publicarTelemetria();
 void atualizarDisplay();
 void pub(const char* topico, const char* payload);
@@ -113,15 +91,12 @@ void pub(const char* topico, const char* payload);
 void setup() {
   Serial.begin(115200);
 
-  // Relés iniciam desligados (RELAY_OFF), demais saídas em LOW
-  int relays[] = { PIN_SALA_LUZ, PIN_SALA_FAN, PIN_QUARTO_LUZ,
-                   PIN_QUARTO_AR, PIN_COZ_LUZ, PIN_COZ_CAFETEIRA };
-  for (int p : relays) { pinMode(p, OUTPUT); digitalWrite(p, RELAY_OFF); }
+  int leds[] = { PIN_SALA_LUZ, PIN_QUARTO_LUZ, PIN_COZ_LUZ, PIN_COZ_CAFETEIRA };
+  for (int p : leds) { pinMode(p, OUTPUT); digitalWrite(p, RELAY_OFF); }
 
-  int saidas[] = { PIN_BUZZER, PIN_TRIG, PIN_LED_R, PIN_LED_G, PIN_LED_B };
+  int saidas[] = { PIN_BUZZER, PIN_LED_R, PIN_LED_G, PIN_LED_B };
   for (int p : saidas) { pinMode(p, OUTPUT); digitalWrite(p, LOW); }
-  pinMode(PIN_PIR,  INPUT);
-  pinMode(PIN_ECHO, INPUT);
+  pinMode(PIN_PIR, INPUT_PULLDOWN);
 
   setLedRGB(true, false, false); // vermelho: inicializando
 
@@ -136,12 +111,12 @@ void setup() {
   }
 
   dht.begin();
-
   doorServo.attach(PIN_SERVO);
-  doorServo.write(0); // porta fechada
+  doorServo.write(0);
 
   setupWifi();
   client.setServer(mqtt_server, mqtt_port);
+  client.setKeepAlive(15);
   client.setCallback(callback);
 
   setLedRGB(false, true, false); // verde: pronto
@@ -155,35 +130,27 @@ void loop() {
 
   unsigned long agora = millis();
 
-  if (agora - tUltimoDHT >= DT_DHT) {
-    lerDHT();
-    tUltimoDHT = agora;
-  }
+  if (agora - tUltimoDHT >= DT_DHT) { lerDHT(); tUltimoDHT = agora; }
 
   verificarPIR();
-
-  if (portaAberta && (agora - tPortaAberta >= DT_PORTA)) setPorta(false);
 
   if (movimento && (agora - tMovimento >= DT_MOV)) {
     movimento = false;
     if (!alarmeAtivo) setLedRGB(false, true, false);
   }
 
-  if (agora - tUltimoMQTT >= DT_MQTT) {
-    publicarTelemetria();
-    tUltimoMQTT = agora;
-  }
+  if (agora - tUltimoMQTT >= DT_MQTT) { publicarTelemetria(); tUltimoMQTT = agora; }
 
-  processarIALocal();
   atualizarDisplay();
   delay(100);
 }
 
-// ── WiFi / MQTT ───────────────────────────────────────────────────────────────
+// ── WiFi ──────────────────────────────────────────────────────────────────────
 void setupWifi() {
   WiFi.begin(ssid, password);
   Serial.print("WiFi");
   while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
+  WiFi.config(WiFi.localIP(), WiFi.gatewayIP(), WiFi.subnetMask(), IPAddress(8, 8, 8, 8));
   Serial.println(" OK: " + WiFi.localIP().toString());
 }
 
@@ -191,19 +158,18 @@ void reconnectMQTT() {
   setLedRGB(false, false, true); // azul: reconectando
   while (!client.connected()) {
     Serial.print("MQTT...");
-    if (client.connect("esp32-smarthome")) {
-      // Tópicos existentes
-      client.subscribe("smarthause-upx/sala-luz");
-      client.subscribe("smarthause-upx/sala-ventilador");
-      client.subscribe("smarthause-upx/quarto-luz");
-      client.subscribe("smarthause-upx/quarto-ar");
-      client.subscribe("smarthause-upx/cozinha-luz");
-      client.subscribe("smarthause-upx/cozinha-cafeteira");
-      // Tópicos novos
-      client.subscribe("smarthause-upx/porta/comando");
-      client.subscribe("smarthause-upx/alarme/comando");
-      client.subscribe("smarthause-upx/reset");
-      pub("smarthause-upx/status", "online");
+    String clientId = "esp32-smarthome-" + String(random(0xffff), HEX);
+    if (client.connect(clientId.c_str())) {
+      client.subscribe("upx2025/casa/sala-luz");
+      client.subscribe("upx2025/casa/sala-ventilador");
+      client.subscribe("upx2025/casa/quarto-luz");
+      client.subscribe("upx2025/casa/quarto-ar");
+      client.subscribe("upx2025/casa/cozinha-luz");
+      client.subscribe("upx2025/casa/cozinha-cafeteira");
+      client.subscribe("upx2025/casa/porta/comando");
+      client.subscribe("upx2025/casa/alarme/comando");
+      client.subscribe("upx2025/casa/reset");
+      pub("upx2025/casa/status", "online");
       Serial.println("OK");
     } else {
       Serial.println("falhou rc=" + String(client.state()));
@@ -219,18 +185,14 @@ void callback(char* topic, byte* payload, unsigned int length) {
   String t = String(topic);
   Serial.println("[" + t + "] " + msg);
 
-  if      (t == "smarthause-upx/sala-luz")           setDispositivo(PIN_SALA_LUZ,      msg == "ON", &salaLuz,      "smarthause-upx/sala-luz/status");
-  else if (t == "smarthause-upx/sala-ventilador")    setDispositivo(PIN_SALA_FAN,       msg == "ON", &salaFan,      "smarthause-upx/sala-ventilador/status");
-  else if (t == "smarthause-upx/quarto-luz")         setDispositivo(PIN_QUARTO_LUZ,     msg == "ON", &quartoLuz,    "smarthause-upx/quarto-luz/status");
-  else if (t == "smarthause-upx/quarto-ar")          setDispositivo(PIN_QUARTO_AR,      msg == "ON", &quartoAr,     "smarthause-upx/quarto-ar/status");
-  else if (t == "smarthause-upx/cozinha-luz")        setDispositivo(PIN_COZ_LUZ,        msg == "ON", &cozLuz,       "smarthause-upx/cozinha-luz/status");
-  else if (t == "smarthause-upx/cozinha-cafeteira")  setDispositivo(PIN_COZ_CAFETEIRA,  msg == "ON", &cozCafeteira, "smarthause-upx/cozinha-cafeteira/status");
-  else if (t == "smarthause-upx/porta/comando")      setPorta(msg == "ABRIR");
-  else if (t == "smarthause-upx/alarme/comando")     { modoSeguranca = (msg == "ATIVAR"); setAlarme(msg == "ATIVAR"); }
-  else if (t == "smarthause-upx/reset" && msg == "RESET_IA") {
-    contadorLuzManual = 0; ciclosObservados = 0; iaAtiva = false;
-    pub("smarthause-upx/ia/status", "inativa");
-    Serial.println("IA reiniciada");
+  if      (t == "upx2025/casa/sala-luz")          setDispositivo(PIN_SALA_LUZ,     msg == "ON", &salaLuz,      "upx2025/casa/sala-luz/status");
+  else if (t == "upx2025/casa/quarto-luz")        setDispositivo(PIN_QUARTO_LUZ,   msg == "ON", &quartoLuz,    "upx2025/casa/quarto-luz/status");
+  else if (t == "upx2025/casa/cozinha-luz")       setDispositivo(PIN_COZ_LUZ,      msg == "ON", &cozLuz,       "upx2025/casa/cozinha-luz/status");
+  else if (t == "upx2025/casa/cozinha-cafeteira") setDispositivo(PIN_COZ_CAFETEIRA,msg == "ON", &cozCafeteira, "upx2025/casa/cozinha-cafeteira/status");
+  else if (t == "upx2025/casa/porta/comando")     setPorta(msg == "ABRIR");
+  else if (t == "upx2025/casa/alarme/comando") {
+    if (msg == "ATIVAR") { modoSeguranca = true; }
+    else { modoSeguranca = false; setAlarme(false); }
   }
 }
 
@@ -241,33 +203,26 @@ void lerDHT() {
   if (!isnan(t)) temperatura = t;
   if (!isnan(h)) umidade     = h;
 
-  // Automação: temperatura alta liga ventilador da sala automaticamente
-  if (temperatura > 28.0 && !salaFan) {
-    setDispositivo(PIN_SALA_FAN, true, &salaFan, "smarthause-upx/sala-ventilador/status");
-    Serial.println("Auto: ventilador ligado (temp=" + String(temperatura) + ")");
-  } else if (temperatura < 26.0 && salaFan) {
-    setDispositivo(PIN_SALA_FAN, false, &salaFan, "smarthause-upx/sala-ventilador/status");
-  }
-
   if (temperatura > 35.0 && (millis() - tUltimoAlarmeTemp > 60000)) {
     tUltimoAlarmeTemp = millis();
-    pub("smarthause-upx/alarme", "calor_extremo");
+    pub("upx2025/casa/alarme", "calor_extremo");
     beep(2000, 500);
   }
 }
 
 void verificarPIR() {
+  if (millis() < PIR_WARMUP) return;
   if (digitalRead(PIN_PIR) && !movimento) {
     movimento  = true;
     tMovimento = millis();
-    setLedRGB(true, true, false); // amarelo: movimento
-    pub("smarthause-upx/movimento", "true");
+    setLedRGB(true, true, false);
+    pub("upx2025/casa/movimento", "true");
     Serial.println("Movimento detectado!");
     if (modoSeguranca) {
       setAlarme(true);
-      pub("smarthause-upx/alarme", "intruso_detectado");
-      modoSeguranca = false; // desarma automaticamente após detectar movimento
-      pub("smarthause-upx/alarme/status", "desarmado");
+      pub("upx2025/casa/alarme", "intruso_detectado");
+      modoSeguranca = false;
+      pub("upx2025/casa/alarme/status", "desarmado");
     }
   }
 }
@@ -277,26 +232,20 @@ void setDispositivo(int pino, bool estado, bool* var, const char* topico) {
   *var = estado;
   digitalWrite(pino, estado ? RELAY_ON : RELAY_OFF);
   pub(topico, estado ? "ON" : "OFF");
-
-  // IA Local: contabiliza acionamentos manuais da sala-luz
-  if (pino == PIN_SALA_LUZ && estado && !iaAtiva) {
-    contadorLuzManual++;
-    Serial.println("IA: contador=" + String(contadorLuzManual));
-  }
 }
 
 void setPorta(bool abrir) {
-  portaAberta  = abrir;
-  tPortaAberta = millis();
+  portaAberta = abrir;
   doorServo.write(abrir ? 90 : 0);
-  pub("smarthause-upx/porta/status", abrir ? "aberta" : "fechada");
+  pub("upx2025/casa/porta/status", abrir ? "aberta" : "fechada");
+  delay(600);
   beep(abrir ? 1500 : 500, 150);
 }
 
 void setAlarme(bool estado) {
   alarmeAtivo = estado;
   if (estado) {
-    setLedRGB(true, false, false); // vermelho: alarme
+    setLedRGB(true, false, false);
     for (int i = 0; i < 5; i++) { beep(2000, 200); delay(100); }
   } else {
     setLedRGB(false, true, false);
@@ -311,42 +260,12 @@ void setLedRGB(bool r, bool g, bool b) {
 
 void beep(int freq, int ms) { tone(PIN_BUZZER, freq, ms); }
 
-// ── IA Local ──────────────────────────────────────────────────────────────────
-void processarIALocal() {
-  unsigned long agora = millis();
-  if (agora - ultimoCicloIA < CICLO_MS || iaAtiva) return;
-  ultimoCicloIA = agora;
-  ciclosObservados++;
-
-  Serial.println("IA ciclo=" + String(ciclosObservados) +
-                 " manual="  + String(contadorLuzManual));
-
-  if (ciclosObservados >= CICLOS_TREINO) {
-    float freq = (float)contadorLuzManual / ciclosObservados;
-    Serial.println("IA freq=" + String(freq));
-
-    if (freq >= FREQ_ATIVACAO) {
-      iaAtiva = true;
-      pub("smarthause-upx/ia/status", "ativa");
-      Serial.println("=== IA ATIVADA! freq=" + String(freq) + " ===");
-      beep(1000, 100); delay(100);
-      beep(1500, 100); delay(100);
-      beep(2000, 200);
-      setLedRGB(false, true, true); // ciano: IA ativa
-    } else {
-      contadorLuzManual = 0;
-      ciclosObservados  = 0;
-    }
-  }
-}
-
 // ── Publicação ────────────────────────────────────────────────────────────────
 void publicarTelemetria() {
   char buf[16];
-  dtostrf(temperatura, 4, 1, buf); pub("smarthause-upx/temperatura", buf);
-  dtostrf(umidade,     4, 1, buf); pub("smarthause-upx/umidade",     buf);
-  pub("smarthause-upx/movimento", movimento ? "true" : "false");
-  pub("smarthause-upx/ia/status", iaAtiva   ? "ativa" : "inativa");
+  dtostrf(temperatura, 4, 1, buf); pub("upx2025/casa/temperatura", buf);
+  dtostrf(umidade,     4, 1, buf); pub("upx2025/casa/umidade",     buf);
+  pub("upx2025/casa/movimento", movimento ? "true" : "false");
 }
 
 void pub(const char* topico, const char* payload) {
@@ -361,14 +280,11 @@ void atualizarDisplay() {
 
   display.setCursor(0,  0); display.print("T:"); display.print(temperatura, 1);
                             display.print("C U:"); display.print(umidade, 1); display.println("%");
-  display.setCursor(0, 10); display.print("Sala Luz:"); display.print(salaLuz ? "ON " : "OFF");
-                            display.print(" Fan:"); display.println(salaFan ? "ON" : "OFF");
-  display.setCursor(0, 20); display.print("Qto  Luz:"); display.print(quartoLuz ? "ON " : "OFF");
-                            display.print(" Ar:"); display.println(quartoAr ? "ON" : "OFF");
-  display.setCursor(0, 30); display.print("Coz  Luz:"); display.print(cozLuz ? "ON " : "OFF");
-                            display.print(" Cafe:"); display.println(cozCafeteira ? "ON" : "OFF");
-  display.setCursor(0, 42); display.print("Porta:"); display.println(portaAberta ? "ABERTA " : "FECHADA");
-  display.setCursor(0, 52); display.print("Mov:"); display.print(movimento ? "SIM " : "NAO ");
-                            display.print("IA:"); display.println(iaAtiva ? "ATIVA" : "APND");
+  display.setCursor(0, 12); display.print("Sala:"); display.print(salaLuz ? "ON " : "OFF");
+                            display.print(" Qto:"); display.println(quartoLuz ? "ON" : "OFF");
+  display.setCursor(0, 24); display.print("Coz:"); display.print(cozLuz ? "ON " : "OFF");
+                            display.print(" Banh:"); display.println(cozCafeteira ? "ON" : "OFF");
+  display.setCursor(0, 36); display.print("Porta:"); display.println(portaAberta ? "ABERTA" : "FECHADA");
+  display.setCursor(0, 48); display.print("Mov:"); display.println(movimento ? "SIM" : "NAO");
   display.display();
 }
