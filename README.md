@@ -1,189 +1,109 @@
-# 🏠 Casa Inteligente — IoT + IA
- 
-Sistema de controle residencial com ESP32, MQTT, React e Inteligência Artificial.
- 
----
- 
-## 📋 Sobre o projeto
- 
-Este projeto permite controlar dispositivos elétricos de uma residência (luzes, tomadas, ar-condicionado etc.) através de um dashboard web moderno. A comunicação entre o servidor e o microcontrolador ESP32 é feita via protocolo MQTT, garantindo baixa latência e alta confiabilidade.
- 
-### Stack utilizada
- 
+# Casa Inteligente: IoT com ESP32, MQTT e assistente de IA
+
+Sistema de automação residencial com ESP32 simulado no Wokwi, backend em Node.js e dashboard web. Os dispositivos podem ser controlados por botões, por regras automáticas baseadas em sensores e por um assistente de IA que entende pedidos em linguagem natural e executa ações com tool use. O objetivo do projeto é mostrar como a automação reduz o desperdício de energia em casa.
+
+Projeto acadêmico da disciplina UPx, Engenharia da Computação, FACENS (abril a junho de 2026).
+
+## O que o sistema faz
+
+- **Dashboard em tempo real:** temperatura, umidade, movimento, porta e alarme, com 6 dispositivos em 3 cômodos (luzes, ventilador, ar-condicionado e cafeteira)
+- **Assistente de IA ("Cláudio"):** conversa em português e usa ferramentas para ligar e desligar dispositivos, controlar um cômodo inteiro, agendar ações, abrir e fechar a porta, armar o alarme e consultar o estado da casa
+- **Automações:** regras criadas pela interface, com gatilhos como "temperatura > 28 °C" ou "umidade >= 80%" e uma ação em um dispositivo, com intervalo mínimo de 60 segundos entre disparos
+- **Segurança no próprio ESP32:** alarme de intruso pelo sensor de movimento e alerta de calor extremo pelo buzzer
+- **Histórico:** registro de cada acionamento e gráficos de telemetria por período (1 h, 6 h, 24 h e 7 dias)
+
+## Arquitetura
+
+```mermaid
+flowchart LR
+    F[Dashboard<br/>React + TanStack] -->|REST| B[Backend<br/>Node.js + Express]
+    B -->|SSE + Socket.io| F
+    B <-->|tool use| C[Claude API<br/>assistente de IA]
+    B <--> D[(Prisma + SQLite<br/>dispositivos, logs, regras, telemetria)]
+    B <-->|MQTT| M[Broker HiveMQ]
+    M <-->|MQTT| E[ESP32 no Wokwi<br/>DHT22, PIR, 6 relés, servo, buzzer, OLED]
+```
+
 | Camada | Tecnologia |
-|---|---|
-| Microcontrolador | ESP32 + PlatformIO |
-| Protocolo IoT | MQTT (HiveMQ público) |
-| Backend | Node.js + Express |
-| Frontend | React + Vite |
-| Simulador | Wokwi for VS Code |
-| Infraestrutura | Docker + Docker Compose |
- 
----
- 
-## 📁 Estrutura do projeto
- 
-```
-projeto-casa-inteligente/
-├── backend/
-│   ├── index.js
-│   ├── package.json
-│   └── Dockerfile
-├── frontend/
-│   ├── src/
-│   │   └── App.jsx
-│   ├── package.json
-│   └── Dockerfile
-├── esp32/
-│   ├── src/
-│   │   └── main.cpp
-│   ├── diagram.json
-│   ├── wokwi.toml
-│   └── platformio.ini
-├── docker-compose.yml
-├── mosquitto.conf
-└── README.md
-```
- 
----
- 
-## 🚀 Como rodar na sua máquina
- 
-### Pré-requisitos
- 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop) instalado e rodando
-- [VS Code](https://code.visualstudio.com/) instalado
-- Extensões do VS Code necessárias (instalar na primeira vez):
-  - **PlatformIO IDE** — para compilar o código do ESP32
-  - **Wokwi Simulator** — para simular o ESP32 com o LED
-### Passo 1 — Clone o repositório
- 
-```bash
-git clone https://github.com/rafuulll/projeto-casa-inteligente.git
-cd projeto-casa-inteligente
-```
- 
-### Passo 2 — Configure as Variáveis de Ambiente
+| --- | --- |
+| Microcontrolador | ESP32 com PlatformIO, simulado no Wokwi |
+| Comunicação IoT | MQTT (broker público HiveMQ), tópicos `upx2025/casa/...` |
+| Backend | Node.js, Express, Prisma (SQLite), Socket.io e SSE |
+| IA | Claude (Anthropic SDK), com 7 ferramentas (tool use) |
+| Frontend | React com TanStack Router e Query, Tailwind |
 
-Para o Chat com Inteligência Artificial funcionar, o backend precisa da sua chave de API.
-Copie o arquivo de exemplo na pasta `backend`:
+## Como o assistente de IA funciona
+
+O backend envia a mensagem do usuário ao Claude junto com a lista de ferramentas disponíveis. O modelo decide qual ferramenta chamar, o backend executa a ação (publica o comando no MQTT e atualiza o banco) e devolve o resultado para o modelo responder em linguagem natural.
+
+| Ferramenta | O que faz |
+| --- | --- |
+| `control_device` | Liga ou desliga um dispositivo |
+| `control_all_devices` | Liga ou desliga todos |
+| `control_room` | Liga ou desliga um cômodo inteiro |
+| `schedule_action` | Agenda uma ação por atraso ou horário |
+| `control_alarm` | Arma ou desarma o alarme |
+| `control_door` | Abre ou fecha a porta |
+| `get_status` | Consulta o estado atual da casa |
+
+## Como rodar
+
+Pré-requisitos: Node.js 20, VS Code com as extensões PlatformIO IDE e Wokwi Simulator, e uma chave da API da Anthropic (só para o chat).
+
+**1. Backend**
 
 ```bash
-cd backend
+git clone https://github.com/rafuulll/projeto-casa-inteligente-upx.git
+cd projeto-casa-inteligente-upx/backend
 cp .env.example .env
 ```
-> Abra o arquivo `backend/.env` que acabou de ser criado e preencha a variável `GROQ_API_KEY` com sua chave (obtida no console da plataforma escolhida). Volte para a raiz (`cd ..`) antes de continuar.
- 
-### Passo 3 — Suba o Docker
- 
+
+No `.env`, use o banco SQLite local e preencha a chave:
+
+```env
+DATABASE_URL="file:./dev.db"
+MQTT_BROKER="mqtt://broker.hivemq.com:1883"
+PORT=3001
+ANTHROPIC_API_KEY="sua_chave"
+```
+
 ```bash
-docker-compose up --build
+npm install
+npx prisma generate
+npm start
 ```
- 
-> Na primeira vez, o Docker vai baixar as imagens e instalar as dependências. Pode demorar alguns minutos.
- 
-Após subir, acesse o dashboard em **http://localhost:5173**
- 
-### Passo 4 — Abra a pasta do ESP32 no VS Code
- 
-> ⚠️ **Importante:** o PlatformIO só reconhece o projeto se você abrir **especificamente a pasta `esp32/`** no VS Code. Se abrir a pasta raiz do projeto, o PlatformIO não vai encontrar o `platformio.ini` e o comando Build não vai aparecer.
- 
-```
-Arquivo → Abrir Pasta → seleciona a pasta esp32/
-```
- 
-### Passo 5 — Aguarde o PlatformIO inicializar
- 
-Na primeira vez em uma máquina nova, o PlatformIO precisa baixar as ferramentas do ESP32. Aguarde alguns minutos até aparecer os ícones na barra inferior do VS Code:
- 
-```
-✔ Build   → Upload   🔌 Serial Monitor
-```
- 
-### Passo 6 — Compile o firmware do ESP32
- 
-```
-Ctrl+Shift+P → PlatformIO: Build
-```
- 
-Ou clique no ícone ✔ na barra inferior do VS Code. Aguarde aparecer `SUCCESS` no terminal.
- 
-> Se o comando `PlatformIO: Build` não aparecer no `Ctrl+Shift+P`, clique no ícone do PlatformIO (👾 alienígena) na barra lateral → Project Tasks → esp32dev → General → Build.
- 
-### Passo 7 — Inicie o simulador Wokwi
- 
-```
-F1 → Wokwi: Start Simulator
-```
- 
-Ou abra o arquivo `diagram.json` e clique em **Play**.
- 
-### Passo 8 — Teste o sistema
- 
-Com tudo rodando, acesse **http://localhost:5173**, teste os botões e converse com a IA para controlar os dispositivos.
- 
----
- 
-## 🔁 Resumo da ordem de inicialização
- 
-```
-1. Configurar backend/.env         → Adicionar chave da API de IA
-2. docker-compose up --build       → Sobe backend + frontend + banco + MQTT
-3. Abrir pasta esp32/ no VS Code   → Reconhece o platformio.ini
-4. PlatformIO: Build               → Compila o firmware (aguarda SUCCESS)
-5. Wokwi: Start Simulator          → Simula o ESP32
-6. Acessar localhost:5173          → Dashboard web com IA funcionando
-```
- 
----
- 
-## 🔌 Fluxo de comunicação
- 
-```
-React (frontend)
-    ↓ POST /api/led/toggle
-Node.js (backend)
-    ↓ publish "casa/led" → ON/OFF
-HiveMQ (broker MQTT público)
-    ↓ subscribe "casa/led"
-ESP32 (Wokwi)
-    ↓ digitalWrite(LED_PIN, HIGH/LOW)
-LED acende/apaga na simulação
-```
- 
----
- 
-## 🛑 Como parar os serviços
- 
+
+O backend sobe em http://localhost:3001 e cria os dispositivos e as regras de exemplo na primeira execução. Sem a chave da Anthropic, só o chat fica indisponível.
+
+**2. Frontend**
+
 ```bash
-docker-compose down
+cd ../frontend
+npm install
+npm run dev
 ```
- 
-### Comandos úteis
- 
-```bash
-# Subir em segundo plano
-docker-compose up -d --build
- 
-# Ver logs de um serviço
-docker-compose logs -f backend
-docker-compose logs -f frontend
-docker-compose logs -f mosquitto
- 
-# Reiniciar um serviço
-docker-compose restart backend
-```
- 
----
- 
-## 🗺️ Roadmap
- 
-- [x] Nível 01 — Controle de LED via web + MQTT
-- [x] Nível 02 — Múltiplos dispositivos + banco de dados + dashboard
-- [x] Nível 03 — Chat com IA + automações por linguagem natural
-- [ ] Nível 04 — Integração WhatsApp + automações por horário
----
- 
-## 👥 Equipe
- 
-Projeto acadêmico desenvolvido por estudantes como parte da disciplina de UPx.
+
+Acesse http://localhost:5173.
+
+**3. ESP32 no Wokwi**
+
+1. Abra a pasta `esp32/` no VS Code (o PlatformIO só reconhece o projeto abrindo essa pasta).
+2. Rode `PlatformIO: Build` e espere o `SUCCESS`.
+3. Rode `Wokwi: Start Simulator`. O ESP32 conecta no Wi-Fi do Wokwi e no broker HiveMQ.
+
+## Limitações conhecidas
+
+- O `docker-compose.yml` ainda aponta para PostgreSQL, enquanto o Prisma usa SQLite. Por enquanto, rode localmente como descrito acima.
+- As regras com gatilho de movimento são salvas, mas o backend só avalia regras quando chegam temperatura ou umidade. O alarme de intruso funciona pelo próprio ESP32.
+- Não há medição real de consumo. A economia de energia apresentada é uma estimativa por potência e tempo ligado (cerca de 48 kWh e R$ 45 por mês no cenário da equipe).
+- O broker MQTT é público e sem autenticação, adequado só para simulação.
+
+## Próximos passos
+
+- Avaliar regras de movimento no backend e unificar SSE e Socket.io em um único canal
+- Corrigir o Docker Compose para subir tudo com um comando
+- Integração com WhatsApp e automações por horário
+
+## Equipe
+
+Projeto em equipe da disciplina UPx. Contribuidores no GitHub: Murilo Oliveira e Rafael Maschietto.
